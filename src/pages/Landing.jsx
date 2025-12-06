@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
+import { runAnalysisPipeline } from '../utils/api'
 import { 
   Mic, 
   MicOff, 
@@ -197,24 +198,51 @@ export default function Landing() {
           }]
         })
 
-        setLoadingStage('Generating analysis...')
+        setLoadingStage('Running full analysis pipeline...')
         let analysisData = null
         try {
-          const response = await fetch('/api/analyze', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              ticker: targetTicker, 
-              company: targetCompany,
-              query: userMessage
+          // Use the full pipeline which includes Apify for PDF and news search
+          const pipelineResult = await runAnalysisPipeline(userMessage, (status, message) => {
+            setLoadingStage(message || status)
+            setMessages(prev => {
+              const filtered = prev.filter(m => !m.isThinking)
+              return [...filtered, { 
+                role: 'assistant', 
+                content: `🔄 ${message || status}...`, 
+                isThinking: true 
+              }]
             })
           })
           
-          if (response.ok) {
-            analysisData = await response.json()
+          if (pipelineResult && !pipelineResult.needsClarification) {
+            analysisData = {
+              ticker: pipelineResult.ticker || targetTicker,
+              company: pipelineResult.company || targetCompany,
+              harvestedData: pipelineResult.harvestedData,
+              debateScript: pipelineResult.debateScript,
+              audioUrl: pipelineResult.audioUrl,
+            }
           }
         } catch (apiError) {
-          console.log('API not available, using mock data')
+          console.log('Pipeline error, using fallback:', apiError)
+          // Fallback to quick analysis if pipeline fails
+          try {
+            const response = await fetch('/api/analyze', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                ticker: targetTicker, 
+                company: targetCompany,
+                query: userMessage
+              })
+            })
+            
+            if (response.ok) {
+              analysisData = await response.json()
+            }
+          } catch (fallbackError) {
+            console.log('Fallback API also failed')
+          }
         }
 
         setMessages(prev => {

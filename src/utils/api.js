@@ -24,7 +24,7 @@ async function fetchAPI(endpoint, options = {}) {
   };
   
   // Debug log: Request
-  console.debug(`[API] ${method} ${url}`, {
+  console.log(`[API] ${method} ${url}`, {
     hasBody: !!options.body,
     bodyLength: options.body?.length || 0,
   });
@@ -36,7 +36,7 @@ async function fetchAPI(endpoint, options = {}) {
     const duration = Math.round(performance.now() - startTime);
     
     // Debug log: Response status
-    console.debug(`[API] ${method} ${url} → ${response.status} (${duration}ms)`);
+    console.log(`[API] ${method} ${url} → ${response.status} (${duration}ms)`);
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -51,7 +51,7 @@ async function fetchAPI(endpoint, options = {}) {
     }
     
     const data = await response.json();
-    console.debug(`[API Success] ${method} ${url}:`, {
+    console.log(`[API Success] ${method} ${url}:`, {
       dataKeys: Object.keys(data),
       duration: `${duration}ms`,
     });
@@ -97,13 +97,13 @@ export async function transcribeAudio(audioBlob) {
  * @returns {Promise<{company, ticker, year, request, confidence, suggestions?}>}
  */
 export async function extractIntent(text) {
-  console.debug('[API] extractIntent called:', { textLength: text?.length || 0 });
+  console.log('[API] extractIntent called:', { textLength: text?.length || 0 });
   try {
     const result = await fetchAPI('/api/intent/extract', {
       method: 'POST',
       body: JSON.stringify({ text }),
     });
-    console.debug('[API] extractIntent result:', { 
+    console.log('[API] extractIntent result:', { 
       ticker: result.ticker, 
       company: result.company,
       sessionId: result.sessionId,
@@ -142,15 +142,17 @@ export async function searchTickers(search) {
  * @param {string} ticker - Stock symbol
  * @param {number} year - Filing year
  * @param {string} reportType - Report type (10-K, 10-Q, etc.)
+ * @param {string} sessionId - Optional session ID to save source documents
  * @returns {Promise<{pdfUrl: string, results: array}>}
  */
-export async function searchPDF(ticker, year, reportType = '10-K') {
-  console.debug('[API] searchPDF called:', { ticker, year, reportType });
+export async function searchPDF(ticker, year, reportType = '10-K', sessionId = null) {
+  console.log('[API] searchPDF called:', { ticker, year, reportType, sessionId });
   try {
-    const result = await fetchAPI(`/api/pdf/search?ticker=${ticker}&year=${year}&reportType=${reportType}`, {
+    const url = `/api/pdf/search?ticker=${ticker}&year=${year}&reportType=${reportType}${sessionId ? `&sessionId=${sessionId}` : ''}`;
+    const result = await fetchAPI(url, {
       method: 'GET',
     });
-    console.debug('[API] searchPDF result:', { 
+    console.log('[API] searchPDF result:', { 
       found: result.results?.length || 0,
       pdfUrl: result.pdfUrl || 'none',
     });
@@ -170,7 +172,7 @@ export async function searchPDF(ticker, year, reportType = '10-K') {
  * @returns {Promise<HarvestedData>}
  */
 export async function harvestPDF(pdfUrl, ticker, company, sessionId) {
-  console.debug('[API] harvestPDF called:', { 
+  console.log('[API] harvestPDF called:', { 
     pdfUrl: pdfUrl?.substring(0, 50) + '...', 
     ticker, 
     company,
@@ -181,7 +183,7 @@ export async function harvestPDF(pdfUrl, ticker, company, sessionId) {
       method: 'POST',
       body: JSON.stringify({ pdfUrl, ticker, company, sessionId }),
     });
-    console.debug('[API] harvestPDF result:', { 
+    console.log('[API] harvestPDF result:', { 
       success: result.success,
       source: result.source,
       hasHarvestedData: !!result.harvestedData,
@@ -201,13 +203,13 @@ export async function harvestPDF(pdfUrl, ticker, company, sessionId) {
  * @returns {Promise<{articles: array}>}
  */
 export async function searchNews(ticker, company, limit = 10) {
-  console.debug('[API] searchNews called:', { ticker, company, limit });
+  console.log('[API] searchNews called:', { ticker, company, limit });
   try {
     const result = await fetchAPI('/api/news/search', {
       method: 'POST',
       body: JSON.stringify({ ticker, company, limit }),
     });
-    console.debug('[API] searchNews result:', { 
+    console.log('[API] searchNews result:', { 
       articlesFound: result.articles?.length || 0,
     });
     return result;
@@ -224,7 +226,7 @@ export async function searchNews(ticker, company, limit = 10) {
  * @returns {Promise<{meta: object, script: array}>}
  */
 export async function generateDebate(harvestedData, sessionId) {
-  console.debug('[API] generateDebate called:', { 
+  console.log('[API] generateDebate called:', { 
     sessionId,
     hasHarvestedData: !!harvestedData,
     ticker: harvestedData?.meta?.ticker,
@@ -234,7 +236,7 @@ export async function generateDebate(harvestedData, sessionId) {
       method: 'POST',
       body: JSON.stringify({ harvestedData, sessionId }),
     });
-    console.debug('[API] generateDebate result:', { 
+    console.log('[API] generateDebate result:', { 
       lineCount: result.script?.length || 0,
       totalDuration: result.meta?.totalDuration,
     });
@@ -252,7 +254,7 @@ export async function generateDebate(harvestedData, sessionId) {
  * @returns {Promise<{audioUrl: string, duration: number}>}
  */
 export async function synthesizeAudio(debateScript, sessionId) {
-  console.debug('[API] synthesizeAudio called:', { 
+  console.log('[API] synthesizeAudio called:', { 
     sessionId,
     scriptLength: debateScript?.length || 0,
   });
@@ -261,7 +263,7 @@ export async function synthesizeAudio(debateScript, sessionId) {
       method: 'POST',
       body: JSON.stringify({ debateScript, sessionId }),
     });
-    console.debug('[API] synthesizeAudio result:', { 
+    console.log('[API] synthesizeAudio result:', { 
       success: result.success,
       segments: result.segments,
       audioUrl: result.audioUrl || 'none',
@@ -316,15 +318,15 @@ export async function healthCheck() {
  * @returns {Promise<{analysis: object, debateScript: array, sessionId: string}>}
  */
 export async function runAnalysisPipeline(query, onStatusChange = () => {}) {
-  console.debug('[Pipeline] Starting analysis pipeline:', { query });
+  console.log('[Pipeline] Starting analysis pipeline:', { query });
   const pipelineStartTime = performance.now();
   
   try {
     // Step 1: Extract intent
-    console.debug('[Pipeline] Step 1: Extracting intent...');
+    console.log('[Pipeline] Step 1: Extracting intent...');
     onStatusChange('extracting_intent', 'Analyzing your request...');
     const intent = await extractIntent(query);
-    console.debug('[Pipeline] Step 1 complete:', { 
+    console.log('[Pipeline] Step 1 complete:', { 
       ticker: intent.ticker, 
       company: intent.company,
       sessionId: intent.sessionId,
@@ -343,13 +345,14 @@ export async function runAnalysisPipeline(query, onStatusChange = () => {}) {
     // Get sessionId from intent (backend creates it)
     const sessionId = intent.sessionId;
     
-    // Step 2: Search for PDF
-    console.debug('[Pipeline] Step 2: Searching for PDF...');
-    onStatusChange('searching_pdf', `Searching for ${intent.ticker} SEC filings...`);
-    const pdfResults = await searchPDF(intent.ticker, intent.year);
-    console.debug('[Pipeline] Step 2 complete:', { 
+    // Step 2: Search for PDF and news (backend automatically fetches and combines both)
+    console.log('[Pipeline] Step 2: Searching for PDFs and news...');
+    onStatusChange('searching_pdf', `Searching for ${intent.ticker} filings and news...`);
+    const pdfResults = await searchPDF(intent.ticker, intent.year, '10-K', sessionId);
+    console.log('[Pipeline] Step 2 complete:', { 
       resultsFound: pdfResults.results?.length || 0,
       pdfUrl: pdfResults.pdfUrl || 'none',
+      note: 'News articles are automatically fetched and saved as sourceDocuments',
     });
     
     // For demo, we'll use sample data if no PDF found
@@ -357,7 +360,7 @@ export async function runAnalysisPipeline(query, onStatusChange = () => {}) {
     
     if (pdfResults.results && pdfResults.results.length > 0 && pdfResults.results[0].url) {
       // Step 3: Harvest PDF
-      console.debug('[Pipeline] Step 3: Harvesting PDF...');
+      console.log('[Pipeline] Step 3: Harvesting PDF...');
       onStatusChange('harvesting', 'Extracting financial data from filing...');
       const harvestResult = await harvestPDF(
         pdfResults.results[0].url,
@@ -367,7 +370,7 @@ export async function runAnalysisPipeline(query, onStatusChange = () => {}) {
       );
       // Extract harvestedData from response (handles both direct data and wrapped response)
       harvestedData = harvestResult.harvestedData || harvestResult;
-      console.debug('[Pipeline] Step 3 complete:', { 
+      console.log('[Pipeline] Step 3 complete:', { 
         source: harvestResult.source,
         hasData: !!harvestedData,
       });
@@ -378,21 +381,22 @@ export async function runAnalysisPipeline(query, onStatusChange = () => {}) {
       harvestedData = await getSampleData(intent.ticker);
     }
     
-    // Step 4: Generate debate
-    console.debug('[Pipeline] Step 4: Generating debate...');
-    onStatusChange('generating_debate', 'Generating Bull vs Bear debate...');
+    // Step 4: Generate debate (backend automatically includes news context from Convex)
+    console.log('[Pipeline] Step 4: Generating debate with news context...');
+    onStatusChange('generating_debate', 'Generating Bull vs Bear debate with news context...');
     const debateResult = await generateDebate(harvestedData, sessionId);
-    console.debug('[Pipeline] Step 4 complete:', { 
+    console.log('[Pipeline] Step 4 complete:', { 
       scriptLines: debateResult.script?.length || 0,
+      note: 'Debate includes context from annual report and recent news',
     });
     
     // Step 5: Synthesize audio (optional - skip if no API key)
-    console.debug('[Pipeline] Step 5: Synthesizing audio...');
+    console.log('[Pipeline] Step 5: Synthesizing audio...');
     onStatusChange('synthesizing_audio', 'Creating audio podcast...');
     let audioResult = null;
     try {
       audioResult = await synthesizeAudio(debateResult.script, sessionId);
-      console.debug('[Pipeline] Step 5 complete:', { 
+      console.log('[Pipeline] Step 5 complete:', { 
         audioUrl: audioResult?.audioUrl || 'none',
       });
     } catch (error) {
@@ -402,7 +406,7 @@ export async function runAnalysisPipeline(query, onStatusChange = () => {}) {
     onStatusChange('complete', 'Analysis complete!');
 
     const pipelineDuration = Math.round(performance.now() - pipelineStartTime);
-    console.debug('[Pipeline] Pipeline complete successfully:', {
+    console.log('[Pipeline] Pipeline complete successfully:', {
       sessionId,
       ticker: intent.ticker,
       duration: `${pipelineDuration}ms`,

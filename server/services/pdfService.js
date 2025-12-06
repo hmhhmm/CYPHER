@@ -136,6 +136,13 @@ export function validateSource(url) {
   const trustedDomains = [
     'sec.gov',
     '.gov',
+    'wsj.com',
+    'ft.com',
+    'bloomberg.com',
+    'reuters.com',
+    'investor.', // investor relations pages
+    'annualreports.com',
+    'bamsec.com',
   ];
 
   try {

@@ -18,6 +18,7 @@ const fileTypeIcons = {
   'SEC Filing': FileSpreadsheet,
   '10-K': FileSpreadsheet,
   '10-Q': FileSpreadsheet,
+  'Annual Report': FileSpreadsheet,
   'Earnings Report': BarChart3,
   'Earnings': BarChart3,
   'Research': FileText,
@@ -114,15 +115,47 @@ export default function SourceDocuments({ documents = [], ticker }) {
                     className="overflow-hidden"
                   >
                     <div className="flex gap-2 mt-3 pt-3 border-t border-white/10">
-                      <button className="flex-1 flex items-center justify-center gap-2 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-lg text-purple-400 text-xs transition-all">
-                        <Eye size={14} />
-                        View
-                      </button>
-                      <button className="flex-1 flex items-center justify-center gap-2 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-gray-400 text-xs transition-all">
-                        <Download size={14} />
-                        Download
-                      </button>
+                      {doc.url && (
+                        <>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (doc.url) {
+                                window.open(doc.url, '_blank', 'noopener,noreferrer');
+                              }
+                            }}
+                            className="flex-1 flex items-center justify-center gap-2 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-lg text-purple-400 text-xs transition-all"
+                          >
+                            <Eye size={14} />
+                            View PDF
+                          </button>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (doc.url) {
+                                // Create a temporary anchor to trigger download
+                                const link = document.createElement('a');
+                                link.href = doc.url;
+                                link.download = doc.name || 'document.pdf';
+                                link.target = '_blank';
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                              }
+                            }}
+                            className="flex-1 flex items-center justify-center gap-2 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-gray-400 text-xs transition-all"
+                          >
+                            <Download size={14} />
+                            Download
+                          </button>
+                        </>
+                      )}
                     </div>
+                    {doc.snippet && (
+                      <p className="text-xs text-gray-400 mt-2 pt-2 border-t border-white/5">
+                        {doc.snippet.substring(0, 150)}{doc.snippet.length > 150 ? '...' : ''}
+                      </p>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
