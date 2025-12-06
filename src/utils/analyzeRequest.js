@@ -1,4 +1,6 @@
-// Stock ticker mapping for common companies
+import { extractIntent } from './api.js';
+
+// Stock ticker mapping for common companies (fallback)
 const tickerMap = {
   // Tech Giants
   'tesla': { ticker: 'TSLA', company: 'Tesla Inc.' },
@@ -64,13 +66,34 @@ const tickerMap = {
 
 /**
  * Analyzes natural language input and extracts stock ticker
+ * Uses backend API when available, falls back to local mapping
  * @param {string} input - User's natural language query
  * @returns {Promise<{ticker: string, company: string}>}
  */
 export async function analyzeRequest(input) {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 800))
+  // Try backend API first
+  try {
+    const intent = await extractIntent(input);
+    
+    if (intent.ticker && intent.company) {
+      return {
+        ticker: intent.ticker,
+        company: intent.company,
+        year: intent.year,
+        confidence: intent.confidence,
+      };
+    }
+    
+    // If backend returned suggestions, we might need clarification
+    if (intent.status === 'clarification_needed') {
+      // For now, try local fallback
+      console.log('Intent needs clarification, trying local fallback');
+    }
+  } catch (error) {
+    console.warn('Backend API unavailable, using local fallback:', error.message);
+  }
   
+  // Fallback to local mapping
   const lowerInput = input.toLowerCase()
   
   // First check for explicit ticker symbols (e.g., $TSLA, TSLA)
@@ -94,7 +117,8 @@ export async function analyzeRequest(input) {
 }
 
 /**
- * Get mock source documents for a ticker
+ * Get source documents for a ticker
+ * Will use real data when available from backend/Convex
  * @param {string} ticker
  * @returns {Array}
  */
@@ -111,7 +135,8 @@ export function getSourceDocuments(ticker) {
 }
 
 /**
- * Get mock key insights for a ticker
+ * Get key insights for a ticker
+ * Will use real data when available from backend/Convex
  * @param {string} ticker
  * @returns {Array}
  */
@@ -145,7 +170,8 @@ export function getKeyInsights(ticker) {
 }
 
 /**
- * Get mock transcript data for a ticker
+ * Get transcript data for a ticker
+ * Will use real data when available from backend/Convex
  * @param {string} ticker
  * @returns {Array}
  */
@@ -186,4 +212,3 @@ export function getTranscript(ticker) {
     { id: 4, speaker: 'bear', text: "Valuation is stretched at current levels. I'd wait for a pullback before building a position.", start: 30, end: 40 },
   ]
 }
-

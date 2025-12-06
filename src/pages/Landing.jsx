@@ -78,12 +78,22 @@ export default function Landing() {
     }
 
     if (isListening) {
-      recognitionRef.current.stop()
+      try {
+        recognitionRef.current.stop()
+      } catch (error) {
+        console.warn('Error stopping recognition:', error)
+      }
       setIsListening(false)
     } else {
-      setInput('')
-      recognitionRef.current.start()
-      setIsListening(true)
+      try {
+        setInput('')
+        recognitionRef.current.start()
+        setIsListening(true)
+      } catch (error) {
+        // Handle "already started" error gracefully
+        console.warn('Speech recognition error:', error.message)
+        setIsListening(false)
+      }
     }
   }
 

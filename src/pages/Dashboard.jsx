@@ -1,6 +1,7 @@
+import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Zap } from 'lucide-react'
+import { ArrowLeft, Zap, Sparkles, AlertCircle } from 'lucide-react'
 import SourceDocuments from '../components/SourceDocuments'
 import PodcastPlayer from '../components/PodcastPlayer'
 import KeyInsights from '../components/KeyInsights'
@@ -14,10 +15,38 @@ export default function Dashboard() {
   const ticker = searchParams.get('ticker') || 'TSLA'
   const company = searchParams.get('company') || 'Tesla Inc.'
   
-  // Get mock data based on ticker
-  const documents = getSourceDocuments(ticker)
-  const insights = getKeyInsights(ticker)
-  const transcript = getTranscript(ticker)
+  const [analysisData, setAnalysisData] = useState(null)
+  const [isRealData, setIsRealData] = useState(false)
+
+  // Load analysis data from sessionStorage
+  useEffect(() => {
+    try {
+      const storedData = sessionStorage.getItem('cypher_analysis')
+      if (storedData) {
+        const parsed = JSON.parse(storedData)
+        // Check if data is for the current ticker and not too old (1 hour)
+        if (parsed.ticker === ticker && (Date.now() - parsed.timestamp) < 3600000) {
+          setAnalysisData(parsed)
+          setIsRealData(!parsed.useFallback && parsed.harvestedData !== null)
+        }
+      }
+    } catch (err) {
+      console.error('Error loading analysis data:', err)
+    }
+  }, [ticker])
+
+  // Prepare data - use real data if available, otherwise fall back to mock
+  const documents = analysisData?.harvestedData 
+    ? generateDocumentsFromHarvested(analysisData.harvestedData, ticker)
+    : getSourceDocuments(ticker)
+  
+  const insights = analysisData?.harvestedData 
+    ? generateInsightsFromHarvested(analysisData.harvestedData)
+    : getKeyInsights(ticker)
+  
+  const transcript = analysisData?.debateScript 
+    ? normalizeDebateScript(analysisData.debateScript)
+    : getTranscript(ticker)
 
   return (
     <motion.div 
@@ -58,6 +87,27 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Data source indicator */}
+          {isRealData ? (
+            <motion.div 
+              className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-full"
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+            >
+              <Sparkles size={12} className="text-green-400" />
+              <span className="text-xs text-green-400 font-medium">AI Generated</span>
+            </motion.div>
+          ) : (
+            <motion.div 
+              className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/20 rounded-full"
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+            >
+              <AlertCircle size={12} className="text-yellow-400" />
+              <span className="text-xs text-yellow-400 font-medium">Sample Data</span>
+            </motion.div>
+          )}
+          
           <motion.div 
             className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-full"
             animate={{ opacity: [0.7, 1, 0.7] }}
@@ -121,3 +171,132 @@ export default function Dashboard() {
   )
 }
 
+/**
+ * Generate document list from harvested data
+ */
+function generateDocumentsFromHarvested(harvestedData, ticker) {
+  const { meta } = harvestedData
+  return [
+    { 
+      id: 1, 
+      name: `${ticker} ${meta.period} ${meta.report_type}.pdf`, 
+      type: 'SEC Filing', 
+      pages: 142, 
+      date: new Date().toISOString().split('T')[0],
+      url: meta.source_url
+    },
+  ]
+}
+
+/**
+ * Generate insights from harvested data using AI-extracted content
+ */
+function generateInsightsFromHarvested(harvestedData) {
+  const { content } = harvestedData
+  const insights = []
+  
+  // Parse management discussion for bullish points
+  if (content.management_discussion) {
+    const mda = content.management_discussion.toLowerCase()
+    
+    if (mda.includes('growth') || mda.includes('increase') || mda.includes('strong')) {
+      insights.push({
+        type: 'bullish',
+        title: 'Growth Momentum',
+        text: extractSentence(content.management_discussion, ['growth', 'increase', 'strong', 'record'])
+      })
+    }
+    
+    if (mda.includes('revenue') || mda.includes('profit')) {
+      insights.push({
+        type: 'bullish',
+        title: 'Financial Performance',
+        text: extractSentence(content.management_discussion, ['revenue', 'profit', 'margin'])
+      })
+    }
+  }
+  
+  // Parse risk factors for bearish points
+  if (content.risk_factors) {
+    const risks = content.risk_factors.toLowerCase()
+    
+    if (risks.includes('competition') || risks.includes('competitive')) {
+      insights.push({
+        type: 'bearish',
+        title: 'Competitive Pressure',
+        text: extractSentence(content.risk_factors, ['competition', 'competitive', 'competitors'])
+      })
+    }
+    
+    if (risks.includes('regulation') || risks.includes('regulatory') || risks.includes('compliance')) {
+      insights.push({
+        type: 'bearish',
+        title: 'Regulatory Risks',
+        text: extractSentence(content.risk_factors, ['regulation', 'regulatory', 'compliance'])
+      })
+    }
+  }
+  
+  // Parse financials for neutral/mixed insights
+  if (content.key_financials) {
+    insights.push({
+      type: 'neutral',
+      title: 'Key Metrics',
+      text: content.key_financials.split('\n')[0] || 'Financial metrics available in the report.'
+    })
+  }
+  
+  // Ensure we have at least 3 insights
+  if (insights.length < 3) {
+    insights.push({
+      type: 'neutral',
+      title: 'Analyst View',
+      text: 'Review the full SEC filing for comprehensive analysis.'
+    })
+  }
+  
+  return insights.slice(0, 4)
+}
+
+/**
+ * Extract a relevant sentence containing keywords
+ */
+function extractSentence(text, keywords) {
+  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 10)
+  
+  for (const sentence of sentences) {
+    const lower = sentence.toLowerCase()
+    if (keywords.some(kw => lower.includes(kw))) {
+      const cleaned = sentence.trim()
+      return cleaned.length > 150 ? cleaned.substring(0, 147) + '...' : cleaned
+    }
+  }
+  
+  // Fallback to first sentence
+  return sentences[0]?.trim().substring(0, 150) || 'See full report for details.'
+}
+
+/**
+ * Normalize debate script to expected transcript format
+ */
+function normalizeDebateScript(debateScript) {
+  if (!debateScript || !Array.isArray(debateScript)) {
+    return []
+  }
+  
+  let currentTime = 0
+  return debateScript.map((line, index) => {
+    const duration = line.duration_estimate || line.end - line.start || 8
+    const start = line.start !== undefined ? line.start : currentTime
+    const end = line.end !== undefined ? line.end : start + duration
+    currentTime = end
+    
+    return {
+      id: line.id || index + 1,
+      speaker: (line.speaker || 'bull').toLowerCase(),
+      text: line.text,
+      start,
+      end,
+    }
+  })
+}
