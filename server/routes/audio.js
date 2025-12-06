@@ -4,25 +4,25 @@ import { api } from '../../convex/_generated/api.js';
 
 const router = express.Router();
 
-// ElevenLabs voice IDs - Natural conversational voices
+// ElevenLabs voice IDs - Smooth natural conversational voices
 const VOICES = {
-  bull: 'TxGEqnHWrfWFTfGW9XjX', // Josh - friendly conversational male
-  bear: '21m00Tcm4TlvDq8ikWAM'  // Rachel - warm natural female
+  bull: 'nPczCjzI2devNBz1zQrb',  // Brian - smooth American male, natural flow
+  bear: 'EXAVITQu4vr4xnSDxMaL'   // Sarah - soft American female, smooth and warm
 };
 
-// Voice settings for natural human conversation
+// Voice settings for smooth natural flow
 const VOICE_SETTINGS = {
   bull: {
-    stability: 0.35,           // Lower = more expressive/dynamic
-    similarity_boost: 0.80,    // Voice consistency
-    style: 0.65,               // Conversational style
-    use_speaker_boost: true
+    stability: 0.65,           // Smooth and consistent
+    similarity_boost: 0.8,    
+    style: 0.3,                // Natural, not dramatic
+    use_speaker_boost: false   // Softer without boost
   },
   bear: {
-    stability: 0.40,
+    stability: 0.6,
     similarity_boost: 0.75,
-    style: 0.55,
-    use_speaker_boost: true
+    style: 0.35,
+    use_speaker_boost: false
   }
 };
 
@@ -82,7 +82,7 @@ router.post('/synthesize', async (req, res, next) => {
             },
             body: JSON.stringify({
               text: line.text,
-              model_id: 'eleven_multilingual_v2',  // Better quality model
+              model_id: 'eleven_turbo_v2_5',  // Most natural sounding
               voice_settings: settings
             })
           }
@@ -196,7 +196,7 @@ router.post('/synthesize-line', async (req, res, next) => {
         },
         body: JSON.stringify({
           text,
-          model_id: 'eleven_multilingual_v2',  // Better quality model
+          model_id: 'eleven_turbo_v2_5',  // Fastest & most natural sounding
           voice_settings: settings
         })
       }

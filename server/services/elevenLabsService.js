@@ -4,26 +4,26 @@
 
 const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1';
 
-// Voice IDs for Bull and Bear - Natural conversational human voices
+// Voice IDs for Bull and Bear - Smooth natural conversational voices
 const VOICE_CONFIG = {
   bull: {
-    id: 'TxGEqnHWrfWFTfGW9XjX', // Josh - friendly conversational male
-    name: 'Bull (Josh - Male)',
+    id: 'nPczCjzI2devNBz1zQrb', // Brian - smooth American male, natural flow
+    name: 'Bull (Brian - Male)',
     settings: {
-      stability: 0.35,         // Lower = more natural variation
-      similarity_boost: 0.80,  // Keeps voice consistent
-      style: 0.65,             // High expressiveness for conversation
-      use_speaker_boost: true,
+      stability: 0.65,
+      similarity_boost: 0.8,
+      style: 0.3,              // Smooth and natural
+      use_speaker_boost: false,
     },
   },
   bear: {
-    id: '21m00Tcm4TlvDq8ikWAM', // Rachel - warm natural female
-    name: 'Bear (Rachel - Female)',
+    id: 'EXAVITQu4vr4xnSDxMaL', // Sarah - soft American female, smooth and warm
+    name: 'Bear (Sarah - Female)',
     settings: {
-      stability: 0.40,
+      stability: 0.6,
       similarity_boost: 0.75,
-      style: 0.55,             // Natural conversational style
-      use_speaker_boost: true,
+      style: 0.35,
+      use_speaker_boost: false,
     },
   },
 };
@@ -59,7 +59,7 @@ export async function synthesizeText(text, speaker = 'bull') {
       },
       body: JSON.stringify({
         text,
-        model_id: 'eleven_multilingual_v2',  // Higher quality, more natural
+        model_id: 'eleven_turbo_v2_5',  // Most natural sounding model
         voice_settings: voiceConfig.settings,
       }),
     }

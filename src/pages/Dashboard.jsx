@@ -34,9 +34,9 @@ export default function Dashboard() {
     ? generateInsightsFromHarvested(analysisData.harvestedData)
     : getKeyInsights(ticker)
   
-  const transcript = analysisData?.debateScript 
-    ? normalizeDebateScript(analysisData.debateScript)
-    : getTranscript(ticker)
+  // Always use the new conversational mock transcripts for consistent human-like voice
+  // The mock data has been updated with natural conversation flow
+  const transcript = getTranscript(ticker)
 
   // Format price with currency (if available from analysis data)
   const currentPrice = analysisData?.currentPrice || null
