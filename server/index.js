@@ -12,6 +12,7 @@ import pdfRoutes from './routes/pdf.js';
 import debateRoutes from './routes/debate.js';
 import audioRoutes from './routes/audio.js';
 import newsRoutes from './routes/news.js';
+import analysisRoutes from './routes/analysis.js';
 
 // Load environment variables
 dotenv.config();
@@ -314,6 +315,7 @@ app.use('/api/transcribe', transcribeRoutes);
 app.use('/api/intent', intentRoutes);
 app.use('/api/pdf', pdfRoutes);
 app.use('/api/debate', debateRoutes);
+app.use('/api/analysis', analysisRoutes);
 app.use('/api/audio', audioRoutes);
 app.use('/api/news', newsRoutes);
 

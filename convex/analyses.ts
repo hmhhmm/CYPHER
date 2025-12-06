@@ -40,6 +40,7 @@ export const updateStatus = mutation({
       v.literal("searching_pdf"),
       v.literal("harvesting"),
       v.literal("generating_debate"),
+      v.literal("generating_report"),
       v.literal("synthesizing_audio"),
       v.literal("complete"),
       v.literal("error")
@@ -88,6 +89,37 @@ export const storeSourceDocuments = mutation({
     await ctx.db.patch(analysis._id, {
       sourceDocuments: args.sourceDocuments,
       status: "harvesting",
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// Add a single source document to existing list
+export const addSourceDocument = mutation({
+  args: {
+    sessionId: v.string(),
+    document: v.object({
+      title: v.string(),
+      url: v.string(),
+      snippet: v.string(),
+      source: v.string(),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const analysis = await ctx.db
+      .query("analyses")
+      .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+      .first();
+    
+    if (!analysis) {
+      throw new Error("Analysis not found");
+    }
+    
+    const existingDocs = analysis.sourceDocuments || [];
+    const updatedDocs = [...existingDocs, args.document];
+    
+    await ctx.db.patch(analysis._id, {
+      sourceDocuments: updatedDocs,
       updatedAt: Date.now(),
     });
   },
@@ -158,6 +190,40 @@ export const storeDebateScript = mutation({
     
     await ctx.db.patch(analysis._id, {
       debateScript: args.debateScript,
+      status: "synthesizing_audio",
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// Store analysis report
+export const storeAnalysisReport = mutation({
+  args: {
+    sessionId: v.string(),
+    analysisReport: v.object({
+      summary: v.string(),
+      financialAnalysis: v.string(),
+      keyStrengths: v.array(v.string()),
+      keyRisks: v.array(v.string()),
+      marketOutlook: v.string(),
+      recommendation: v.optional(v.string()),
+      generatedAt: v.number(),
+      company: v.string(),
+      ticker: v.string(),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const analysis = await ctx.db
+      .query("analyses")
+      .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+      .first();
+    
+    if (!analysis) {
+      throw new Error("Analysis not found");
+    }
+    
+    await ctx.db.patch(analysis._id, {
+      analysisReport: args.analysisReport,
       status: "synthesizing_audio",
       updatedAt: Date.now(),
     });

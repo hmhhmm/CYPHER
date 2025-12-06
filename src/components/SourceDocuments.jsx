@@ -19,6 +19,8 @@ const fileTypeIcons = {
   '10-K': FileSpreadsheet,
   '10-Q': FileSpreadsheet,
   'Annual Report': FileSpreadsheet,
+  'Investment Analysis Report': FileText,
+  'Analysis Report': FileText,
   'Earnings Report': BarChart3,
   'Earnings': BarChart3,
   'Research': FileText,
@@ -27,7 +29,7 @@ const fileTypeIcons = {
   'Interview': Mic,
 }
 
-export default function SourceDocuments({ documents = [], ticker }) {
+export default function SourceDocuments({ documents = [], ticker, sessionId }) {
   const [selectedDoc, setSelectedDoc] = useState(null)
   const [hoveredDoc, setHoveredDoc] = useState(null)
 
@@ -183,7 +185,19 @@ export default function SourceDocuments({ documents = [], ticker }) {
       </div>
 
       {/* Footer */}
-      <div className="px-4 py-3 border-t border-white/10 bg-white/[0.02]">
+      <div className="px-4 py-3 border-t border-white/10 bg-white/[0.02] space-y-2">
+        {sessionId && (
+          <button 
+            onClick={() => {
+              const url = `http://localhost:3001/api/analysis/download-pdf?sessionId=${sessionId}&ticker=${ticker}`;
+              window.open(url, '_blank');
+            }}
+            className="w-full flex items-center justify-center gap-2 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-lg text-purple-400 text-sm font-medium transition-all"
+          >
+            <Download size={14} />
+            Analyze PDF
+          </button>
+        )}
         <button className="w-full flex items-center justify-center gap-2 py-2 text-sm text-gray-400 hover:text-purple-400 transition-colors">
           <ExternalLink size={14} />
           View All Sources

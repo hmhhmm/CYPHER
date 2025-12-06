@@ -1,0 +1,429 @@
+import express from 'express';
+import Anthropic from '@anthropic-ai/sdk';
+import { convex } from '../index.js';
+import { api } from '../../convex/_generated/api.js';
+import PDFDocument from 'pdfkit';
+
+const router = express.Router();
+
+// Initialize Anthropic client
+const getAnthropicClient = () => {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY is not configured');
+  }
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+};
+
+/**
+ * POST /api/analysis/generate-report
+ * Generate comprehensive analysis report from harvested data and source documents
+ */
+router.post('/generate-report', async (req, res, next) => {
+  const startTime = Date.now();
+  try {
+    const { sessionId, harvestedData, sourceDocuments, company, ticker } = req.body;
+
+    console.log('[Analysis Report] === GENERATE REPORT REQUEST ===');
+    console.log('[Analysis Report] SessionId:', sessionId);
+    console.log('[Analysis Report] Company:', company);
+    console.log('[Analysis Report] Ticker:', ticker);
+    console.log('[Analysis Report] Has harvestedData:', !!harvestedData);
+    console.log('[Analysis Report] Has sourceDocuments:', !!sourceDocuments);
+
+    if (!harvestedData || !harvestedData.meta || !harvestedData.content) {
+      console.error('[Analysis Report] Invalid harvestedData structure:', harvestedData);
+      return res.status(400).json({
+        error: 'Valid harvestedData is required',
+        code: 'INVALID_INPUT'
+      });
+    }
+
+    const { meta, content } = harvestedData;
+    const companyName = company || meta.company;
+    const tickerSymbol = ticker || meta.ticker;
+
+    console.log(`[Analysis Report] Generating report for ${companyName} (${tickerSymbol})`);
+    console.log(`[Analysis Report] Content lengths - MD&A: ${content.management_discussion?.length || 0}, Risks: ${content.risk_factors?.length || 0}, Financials: ${content.key_financials?.length || 0}`);
+
+    // Update status if sessionId provided
+    if (sessionId && convex) {
+      try {
+        await convex.mutation(api.analyses.updateStatus, {
+          sessionId,
+          status: 'generating_report'
+        });
+      } catch (err) {
+        console.warn('[Analysis Report] Failed to update status:', err);
+      }
+    }
+
+    // Fetch source documents from Convex if not provided
+    let finalSourceDocuments = sourceDocuments;
+    let newsArticles = [];
+    if (!finalSourceDocuments && sessionId && convex) {
+      try {
+        const analysis = await convex.query(api.analyses.getBySession, { sessionId });
+        if (analysis && analysis.sourceDocuments) {
+          finalSourceDocuments = analysis.sourceDocuments;
+          console.log(`[Analysis Report] Fetched ${finalSourceDocuments.length} source documents from Convex`);
+        }
+      } catch (err) {
+        console.warn('[Analysis Report] Failed to fetch source documents:', err);
+      }
+    }
+
+    // Fetch recent news from Convex
+    if (convex && tickerSymbol) {
+      try {
+        const news = await convex.query(api.news.getByTicker, { ticker: tickerSymbol });
+        if (news && news.articles) {
+          newsArticles = news.articles.slice(0, 5); // Get top 5 recent articles
+          console.log(`[Analysis Report] Fetched ${newsArticles.length} news articles from Convex`);
+        }
+      } catch (err) {
+        console.warn('[Analysis Report] Failed to fetch news:', err);
+      }
+    }
+
+    const client = getAnthropicClient();
+
+    // Build source documents context
+    let sourceDocsContext = '';
+    if (finalSourceDocuments && finalSourceDocuments.length > 0) {
+      const docsList = finalSourceDocuments.slice(0, 10).map((doc, idx) => 
+        `${idx + 1}. ${doc.title || 'Document'}\n   Source: ${doc.source || 'Unknown'}\n   ${doc.snippet ? `Snippet: ${doc.snippet.substring(0, 200)}...` : ''}`
+      ).join('\n\n');
+      sourceDocsContext = `\n\n**Source Documents Analyzed (Annual Reports & SEC Filings):**\n${docsList}`;
+    }
+
+    // Build news context
+    let newsContext = '';
+    if (newsArticles && newsArticles.length > 0) {
+      const newsList = newsArticles.map((article, idx) => 
+        `${idx + 1}. ${article.title}\n   Source: ${article.source}\n   Published: ${new Date(article.publishedDate).toLocaleDateString()}\n   ${article.snippet ? `Summary: ${article.snippet.substring(0, 200)}...` : ''}`
+      ).join('\n\n');
+      newsContext = `\n\n**Recent News Coverage:**\n${newsList}`;
+    }
+
+    const prompt = `You are a senior financial analyst creating a comprehensive investment analysis report for ${companyName} (${tickerSymbol}).
+
+**Company Data from Annual Report:**
+
+**Management Discussion & Analysis:**
+${content.management_discussion}
+
+**Risk Factors:**
+${content.risk_factors}
+
+**Key Financials:**
+${content.key_financials}${sourceDocsContext}${newsContext}
+
+**Instructions:**
+Create a comprehensive, professional investment analysis report with the following structure. Be specific, data-driven, and actionable. Reference specific numbers and facts from the data provided.
+
+Return a JSON object with this exact structure:
+{
+  "summary": "Executive summary (2-3 paragraphs) covering company performance, key highlights, and overall investment thesis",
+  "financialAnalysis": "Detailed financial performance analysis (3-4 paragraphs) with specific metrics, trends, and comparisons",
+  "keyStrengths": [
+    "First key strength with specific data points",
+    "Second key strength with specific data points",
+    "Third key strength with specific data points",
+    "Fourth key strength (if applicable)"
+  ],
+  "keyRisks": [
+    "First key risk with specific concerns",
+    "Second key risk with specific concerns",
+    "Third key risk with specific concerns",
+    "Fourth key risk (if applicable)"
+  ],
+  "marketOutlook": "Market outlook and future prospects (2-3 paragraphs) based on management discussion and industry trends",
+  "recommendation": "Investment recommendation summary (1-2 paragraphs) - be balanced and reference both strengths and risks"
+}
+
+Guidelines:
+- Use specific numbers, percentages, and metrics from the financial data
+- Reference management's own statements from MD&A
+- Cite specific risk factors mentioned
+- Be balanced - acknowledge both opportunities and challenges
+- Write in professional analyst tone
+- Keep each section concise but informative
+- Minimum 3 items each for keyStrengths and keyRisks
+
+Return ONLY the JSON object, no markdown or explanation:`;
+
+    console.log('[Analysis Report] Calling Anthropic API...');
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4000,
+      messages: [{ role: 'user', content: prompt }]
+    });
+    console.log('[Analysis Report] Anthropic API response received');
+
+    const responseText = response.content[0].text.trim();
+
+    // Parse JSON response
+    let analysisReport;
+    try {
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        analysisReport = JSON.parse(jsonMatch[0]);
+      } else {
+        analysisReport = JSON.parse(responseText);
+      }
+    } catch (parseError) {
+      console.error('[Analysis Report] JSON parse failed:', parseError);
+      throw new Error('Failed to parse analysis report from AI response');
+    }
+
+    // Validate structure
+    if (!analysisReport.summary || !analysisReport.financialAnalysis) {
+      throw new Error('Invalid analysis report structure from AI');
+    }
+
+    // Ensure arrays exist
+    if (!Array.isArray(analysisReport.keyStrengths)) {
+      analysisReport.keyStrengths = [];
+    }
+    if (!Array.isArray(analysisReport.keyRisks)) {
+      analysisReport.keyRisks = [];
+    }
+
+    // Add metadata
+    const reportWithMeta = {
+      ...analysisReport,
+      generatedAt: Date.now(),
+      company: companyName,
+      ticker: tickerSymbol,
+    };
+
+    console.log(`[Analysis Report] Generated report with ${analysisReport.keyStrengths.length} strengths and ${analysisReport.keyRisks.length} risks`);
+
+    // Save to Convex if sessionId provided
+    if (sessionId && convex) {
+      try {
+        console.log('[Analysis Report] Saving to Convex...');
+        await convex.mutation(api.analyses.storeAnalysisReport, {
+          sessionId,
+          analysisReport: reportWithMeta
+        });
+        console.log(`[Analysis Report] ✓ Saved to Convex session: ${sessionId}`);
+        console.log(`[Analysis Report] PDF available at: /api/analysis/download-pdf?sessionId=${sessionId}&ticker=${tickerSymbol}`);
+      } catch (convexError) {
+        console.error('[Analysis Report] ✗ Failed to save to Convex:', convexError);
+        // Continue - don't fail the request
+      }
+    }
+
+    const duration = Date.now() - startTime;
+    console.log(`[Analysis Report] === REPORT GENERATION COMPLETE (${duration}ms) ===`);
+
+    res.json({
+      success: true,
+      report: reportWithMeta,
+      meta: {
+        company: companyName,
+        ticker: tickerSymbol,
+        generatedAt: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    console.error('[Analysis Report] === ERROR ===');
+    console.error('[Analysis Report] Duration:', duration + 'ms');
+    console.error('[Analysis Report] Error:', error.message);
+    console.error('[Analysis Report] Stack:', error.stack);
+    next({
+      status: 500,
+      message: error.message,
+      code: 'REPORT_GENERATION_FAILED'
+    });
+  }
+});
+
+/**
+ * GET /api/analysis/download-pdf
+ * Download analysis report as PDF
+ */
+router.get('/download-pdf', async (req, res, next) => {
+  try {
+    const { sessionId, ticker } = req.query;
+
+    if (!sessionId) {
+      return res.status(400).json({
+        error: 'sessionId is required',
+        code: 'INVALID_INPUT'
+      });
+    }
+
+    console.log(`[Analysis PDF] Generating PDF for session: ${sessionId}`);
+
+    // Fetch analysis report from Convex
+    if (!convex) {
+      return res.status(500).json({
+        error: 'Convex not configured',
+        code: 'CONVEX_NOT_AVAILABLE'
+      });
+    }
+
+    const analysis = await convex.query(api.analyses.getBySession, { sessionId });
+    
+    if (!analysis || !analysis.analysisReport) {
+      return res.status(404).json({
+        error: 'Analysis report not found',
+        code: 'NOT_FOUND'
+      });
+    }
+
+    const report = analysis.analysisReport;
+    const companyName = report.company || analysis.company;
+    const tickerSymbol = report.ticker || analysis.ticker;
+
+    // Create PDF
+    const doc = new PDFDocument({ 
+      size: 'A4', 
+      margin: 50,
+      info: {
+        Title: `${companyName} Investment Analysis`,
+        Author: 'CYPHER Financial Intelligence',
+        Subject: `Investment Analysis for ${tickerSymbol}`,
+        Keywords: 'financial analysis, investment report, stock analysis'
+      }
+    });
+
+    // Set response headers
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${tickerSymbol}_Analysis_Report.pdf"`);
+    
+    // Pipe PDF to response
+    doc.pipe(res);
+
+    // Title Page
+    doc.fontSize(28)
+       .fillColor('#6366f1')
+       .text('CYPHER', { align: 'center' })
+       .moveDown(0.5);
+    
+    doc.fontSize(20)
+       .fillColor('#000000')
+       .text('Investment Analysis Report', { align: 'center' })
+       .moveDown(0.3);
+    
+    doc.fontSize(16)
+       .fillColor('#6366f1')
+       .text(`${companyName} (${tickerSymbol})`, { align: 'center' })
+       .moveDown(0.5);
+    
+    doc.fontSize(10)
+       .fillColor('#666666')
+       .text(new Date(report.generatedAt).toLocaleString('en-US', { 
+         dateStyle: 'long', 
+         timeStyle: 'short' 
+       }), { align: 'center' })
+       .moveDown(2);
+
+    // Executive Summary Section
+    doc.fontSize(16)
+       .fillColor('#000000')
+       .text('Executive Summary', { underline: true })
+       .moveDown(0.5);
+    
+    doc.fontSize(10)
+       .fillColor('#333333')
+       .text(report.summary, { align: 'justify', lineGap: 4 })
+       .moveDown(1.5);
+
+    // Financial Performance Analysis Section
+    doc.fontSize(16)
+       .fillColor('#000000')
+       .text('Financial Performance Analysis', { underline: true })
+       .moveDown(0.5);
+    
+    doc.fontSize(10)
+       .fillColor('#333333')
+       .text(report.financialAnalysis, { align: 'justify', lineGap: 4 })
+       .moveDown(1.5);
+
+    // Key Strengths Section
+    doc.fontSize(16)
+       .fillColor('#000000')
+       .text('Key Strengths', { underline: true })
+       .moveDown(0.5);
+    
+    (report.keyStrengths || []).forEach((strength, index) => {
+      doc.fontSize(10)
+         .fillColor('#16a34a')
+         .text(`✓ `, { continued: true })
+         .fillColor('#333333')
+         .text(strength, { align: 'justify', lineGap: 4 })
+         .moveDown(0.5);
+    });
+    doc.moveDown(1);
+
+    // Key Risks Section
+    doc.fontSize(16)
+       .fillColor('#000000')
+       .text('Key Risks', { underline: true })
+       .moveDown(0.5);
+    
+    (report.keyRisks || []).forEach((risk, index) => {
+      doc.fontSize(10)
+         .fillColor('#dc2626')
+         .text(`⚠ `, { continued: true })
+         .fillColor('#333333')
+         .text(risk, { align: 'justify', lineGap: 4 })
+         .moveDown(0.5);
+    });
+    doc.moveDown(1);
+
+    // Market Outlook Section
+    if (report.marketOutlook) {
+      doc.fontSize(16)
+         .fillColor('#000000')
+         .text('Market Outlook', { underline: true })
+         .moveDown(0.5);
+      
+      doc.fontSize(10)
+         .fillColor('#333333')
+         .text(report.marketOutlook, { align: 'justify', lineGap: 4 })
+         .moveDown(1.5);
+    }
+
+    // Investment Recommendation Section
+    if (report.recommendation) {
+      doc.fontSize(16)
+         .fillColor('#000000')
+         .text('Investment Recommendation', { underline: true })
+         .moveDown(0.5);
+      
+      doc.fontSize(10)
+         .fillColor('#333333')
+         .text(report.recommendation, { align: 'justify', lineGap: 4 })
+         .moveDown(1.5);
+    }
+
+    // Footer
+    doc.fontSize(8)
+       .fillColor('#999999')
+       .text('This report is generated by CYPHER AI and is for informational purposes only. Not financial advice.', 
+             50, doc.page.height - 50, 
+             { align: 'center', width: doc.page.width - 100 });
+
+    // Finalize PDF
+    doc.end();
+
+    console.log(`[Analysis PDF] PDF generated successfully for ${tickerSymbol}`);
+
+  } catch (error) {
+    console.error('[Analysis PDF] Error:', error);
+    next({
+      status: 500,
+      message: error.message,
+      code: 'PDF_GENERATION_FAILED'
+    });
+  }
+});
+
+export default router;
+

@@ -127,7 +127,9 @@ export function useAnalysisData(ticker) {
                 .map((doc, index) => {
                   // Determine document type based on source and URL
                   let docType = 'SEC Filing';
-                  if (doc.source === 'news' || doc.source?.includes('news') || 
+                  if (doc.source === 'analysis-report') {
+                    docType = 'Investment Analysis Report';
+                  } else if (doc.source === 'news' || doc.source?.includes('news') || 
                       doc.url?.includes('wsj.com') || doc.url?.includes('bloomberg.com') || 
                       doc.url?.includes('reuters.com') || doc.url?.includes('ft.com')) {
                     // Check if it's actually a news article (not a PDF from these sources)
@@ -191,6 +193,7 @@ export function useAnalysisData(ticker) {
         transcript: convexAnalysis.debateScript || getTranscript(ticker),
         harvestedData: convexAnalysis.harvestedData,
         debateScript: convexAnalysis.debateScript,
+        analysisReport: convexAnalysis.analysisReport,
         audioUrl: convexAnalysis.audioUrl,
         sessionId: convexAnalysis.sessionId,
         ticker: convexAnalysis.ticker,
