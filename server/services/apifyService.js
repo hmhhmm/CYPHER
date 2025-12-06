@@ -6,6 +6,116 @@
 const APIFY_API_URL = 'https://api.apify.com/v2';
 
 /**
+ * Detect if ticker is non-US and adjust search sources
+ * @param {string} ticker - Stock ticker symbol
+ * @param {string} company - Company name (optional)
+ * @returns {Object} Search configuration for the company's country
+ */
+function getSearchSources(ticker, company) {
+  const lowerCompany = company?.toLowerCase() || '';
+  const upperTicker = ticker?.toUpperCase() || '';
+  
+  // Japanese companies (Sony, Toyota, Nintendo, etc.)
+  if (ticker.endsWith('.T') || lowerCompany.includes('japan') || 
+      ['SONY', 'TM', 'NTDOY', 'HMC', '7203.T', '6758.T'].includes(upperTicker)) {
+    return {
+      sites: 'site:irwebcasting.com OR site:kabu.com OR site:nikkei.com OR site:kabutan.jp',
+      reportType: 'annual report OR earnings report OR financial results OR 有価証券報告書',
+      language: 'en',
+      country: 'jp',
+      countryName: 'Japanese'
+    };
+  }
+  
+  // UK companies (BP, HSBC, Vodafone, etc.)
+  if (ticker.endsWith('.L') || ticker.endsWith('.LON') || 
+      ['BP', 'HSBA', 'VOD', 'GSK', 'AZN', 'SHEL'].includes(upperTicker) ||
+      lowerCompany.includes('london') || lowerCompany.includes('british')) {
+    return {
+      sites: 'site:londonstockexchange.com OR site:investegate.co.uk OR site:morningstar.co.uk',
+      reportType: 'annual report OR earnings',
+      language: 'en',
+      country: 'uk',
+      countryName: 'UK'
+    };
+  }
+  
+  // German companies (SAP, Volkswagen, BMW, etc.)
+  if (ticker.endsWith('.DE') || ticker.endsWith('.F') || 
+      ['SAP', 'VOW', 'BASFY', 'BMW', 'DAI'].includes(upperTicker) ||
+      lowerCompany.includes('german') || lowerCompany.includes('deutschland')) {
+    return {
+      sites: 'site:boerse-frankfurt.de OR site:finanzen.net OR site:4-traders.com',
+      reportType: 'annual report OR geschäftsbericht OR earnings',
+      language: 'en',
+      country: 'de',
+      countryName: 'German'
+    };
+  }
+  
+  // Chinese/Hong Kong companies (Alibaba, Tencent, etc.)
+  if (ticker.endsWith('.HK') || ticker.endsWith('.SS') || ticker.endsWith('.SZ') ||
+      ['BABA', 'TCEHY', 'JD', 'BIDU', '0700.HK', '9988.HK'].includes(upperTicker) ||
+      lowerCompany.includes('hong kong') || lowerCompany.includes('china')) {
+    return {
+      sites: 'site:hkexnews.hk OR site:aastocks.com OR site:etnet.com.hk',
+      reportType: 'annual report OR earnings OR interim report',
+      language: 'en',
+      country: 'hk',
+      countryName: 'Hong Kong/Chinese'
+    };
+  }
+  
+  // Canadian companies (Shopify, Royal Bank, etc.)
+  if (ticker.endsWith('.TO') || ticker.endsWith('.V') ||
+      ['SHOP', 'RY', 'TD', 'CNQ', 'ENB'].includes(upperTicker) ||
+      lowerCompany.includes('canada') || lowerCompany.includes('canadian')) {
+    return {
+      sites: 'site:sedar.com OR site:tmx.com OR site:tsx.com',
+      reportType: 'annual report OR earnings OR AIF',
+      language: 'en',
+      country: 'ca',
+      countryName: 'Canadian'
+    };
+  }
+  
+  // Australian companies
+  if (ticker.endsWith('.AX') || ticker.endsWith('.AU') ||
+      ['BHP', 'CBA', 'NAB', 'WBC'].includes(upperTicker) ||
+      lowerCompany.includes('australia') || lowerCompany.includes('australian')) {
+    return {
+      sites: 'site:asx.com.au OR site:afr.com OR site:commsec.com.au',
+      reportType: 'annual report OR earnings',
+      language: 'en',
+      country: 'au',
+      countryName: 'Australian'
+    };
+  }
+  
+  // French companies (LVMH, Total, etc.)
+  if (ticker.endsWith('.PA') || 
+      ['MC', 'OR', 'SAN', 'AIR'].includes(upperTicker) ||
+      lowerCompany.includes('france') || lowerCompany.includes('french')) {
+    return {
+      sites: 'site:euronext.com OR site:boursorama.com OR site:boursier.com',
+      reportType: 'annual report OR rapport annuel OR earnings',
+      language: 'en',
+      country: 'fr',
+      countryName: 'French'
+    };
+  }
+  
+  // Default: US companies
+  return {
+    sites: 'site:sec.gov OR site:wsj.com OR site:bloomberg.com OR site:reuters.com OR site:ft.com',
+    reportType: 'annual report OR 10-K',
+    language: 'en',
+    country: 'us',
+    countryName: 'US'
+  };
+}
+
+/**
  * Search for SEC filings using Apify Google Search Scraper
  * @param {string} ticker - Stock ticker symbol
  * @param {number} year - Filing year
@@ -19,12 +129,15 @@ export async function searchSECFilings(ticker, year, reportType = '10-K', compan
     return fallbackSECSearch(ticker, year, reportType, company);
   }
 
+  // Detect country and adjust search sources
+  const sources = getSearchSources(ticker, company);
+  
   // Search across multiple trusted sources for annual reports
   // Include company name in query for better matching: use quotes for exact phrase matching
   const companyPart = company ? `"${company}" OR ` : '';
-  const searchQuery = `${companyPart}"${ticker}" ${year} annual report ${reportType} (site:sec.gov OR site:wsj.com OR site:bloomberg.com OR site:reuters.com OR site:ft.com) filetype:pdf`;
+  const searchQuery = `${companyPart}"${ticker}" ${year} ${sources.reportType} (${sources.sites}) filetype:pdf`;
   
-  console.log(`[Apify] Searching across multiple sources: "${searchQuery}"`);
+  console.log(`[Apify] Searching for ${sources.countryName} company: "${searchQuery}"`);
 
   try {
     // Step 1: Start the actor run using standard Apify API
@@ -42,8 +155,8 @@ export async function searchSECFilings(ticker, year, reportType = '10-K', compan
           maxPagesPerQuery: 1,
           resultsPerPage: 10,
           mobileResults: false,
-          languageCode: 'en',
-          countryCode: 'us',
+          languageCode: sources.language,
+          countryCode: sources.country,
         }),
       }
     );
