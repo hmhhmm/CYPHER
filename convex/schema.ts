@@ -134,5 +134,20 @@ export default defineSchema({
     .index("by_url", ["pdfUrl"])
     .index("by_hash", ["pdfHash"])
     .index("by_ticker", ["ticker"]),
+
+  // News articles cache
+  news: defineTable({
+    ticker: v.string(),
+    company: v.string(),
+    articles: v.array(v.object({
+      title: v.string(),
+      url: v.string(),
+      snippet: v.string(),
+      source: v.string(),
+      publishedDate: v.string(),
+    })),
+    fetchedAt: v.number(),
+  }).index("by_ticker", ["ticker"]),
 });
+
 

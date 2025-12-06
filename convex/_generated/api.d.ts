@@ -9,6 +9,7 @@
  */
 
 import type * as analyses from "../analyses.js";
+import type * as news from "../news.js";
 import type * as partialIntents from "../partialIntents.js";
 import type * as pdfCache from "../pdfCache.js";
 
@@ -20,6 +21,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   analyses: typeof analyses;
+  news: typeof news;
   partialIntents: typeof partialIntents;
   pdfCache: typeof pdfCache;
 }>;

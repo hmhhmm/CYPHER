@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useLocation, useNavigate } from 'react-router-dom'
+import { useParams, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Zap, TrendingUp, TrendingDown, Sparkles, AlertCircle } from 'lucide-react'
 import SourceDocuments from '../components/SourceDocuments'
@@ -12,37 +12,11 @@ export default function Dashboard() {
   const { ticker: paramTicker } = useParams()
   const location = useLocation()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   
-  // Get data from navigation state or URL params
-  const stateData = location.state || {}
-  const ticker = paramTicker || stateData.ticker || 'TSLA'
-  const company = stateData.company || 'Tesla Inc.'
-  const analysisData = stateData.analysisData
-  
-  // Use API data if available, otherwise fall back to mock data
-  const documents = analysisData?.sources 
-    ? analysisData.sources.map((source, idx) => ({
-        id: idx + 1,
-        name: source,
-        type: source.includes('10-K') || source.includes('10-Q') ? 'SEC Filing' : 
-              source.includes('Earnings') ? 'Earnings' : 'Research',
-        pages: Math.floor(Math.random() * 100) + 10,
-        date: new Date().toISOString().split('T')[0]
-      }))
-    : getSourceDocuments(ticker)
-    
-  const insights = analysisData?.keyInsights 
-    ? analysisData.keyInsights
-    : getKeyInsights(ticker)
-    
-  const transcript = analysisData 
-    ? generateTranscriptFromAnalysis(analysisData)
-    : getTranscript(ticker)
-
-  // Format price with currency
-  const currentPrice = analysisData?.currentPrice || null
-  const ticker = searchParams.get('ticker') || 'TSLA'
-  const company = searchParams.get('company') || 'Tesla Inc.'
+  // Get ticker and company from multiple sources (priority: URL params > search params > state > default)
+  const ticker = paramTicker || searchParams.get('ticker') || location.state?.ticker || 'TSLA'
+  const company = searchParams.get('company') || location.state?.company || 'Tesla Inc.'
   
   const [analysisData, setAnalysisData] = useState(null)
   const [isRealData, setIsRealData] = useState(false)
@@ -59,11 +33,11 @@ export default function Dashboard() {
           setIsRealData(!parsed.useFallback && parsed.harvestedData !== null)
         }
       }
-    } catch (err) {
-      console.error('Error loading analysis data:', err)
+    } catch (error) {
+      console.error('Error loading analysis data:', error)
     }
   }, [ticker])
-
+  
   // Prepare data - use real data if available, otherwise fall back to mock
   const documents = analysisData?.harvestedData 
     ? generateDocumentsFromHarvested(analysisData.harvestedData, ticker)
@@ -76,6 +50,9 @@ export default function Dashboard() {
   const transcript = analysisData?.debateScript 
     ? normalizeDebateScript(analysisData.debateScript)
     : getTranscript(ticker)
+
+  // Format price with currency
+  const currentPrice = analysisData?.currentPrice || null
 
   return (
     <motion.div 
