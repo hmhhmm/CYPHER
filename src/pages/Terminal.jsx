@@ -139,24 +139,33 @@ export default function Terminal() {
         }
       )
 
-      // Navigate to dashboard with result
+      // Navigate to dashboard with result - pass analysisData in state
       await delay(800)
-      if (result && result.sessionId) {
-        navigate(`/dashboard/${ticker}?company=${encodeURIComponent(company)}&sessionId=${result.sessionId}`)
-      } else {
-        navigate(`/dashboard/${ticker}?company=${encodeURIComponent(company)}`)
-      }
+      navigate(`/dashboard/${ticker}?company=${encodeURIComponent(company)}`, {
+        state: { 
+          analysisData: result,
+          ticker,
+          company,
+        }
+      })
 
     } catch (err) {
       console.error('Pipeline error:', err)
       setError(err.message)
       addLine(`> [ERROR] ${err.message}`, 'red')
-      addLine(`> Retrying with fallback data for ${ticker}...`, 'yellow')
+      addLine(`> Analysis failed. Navigating to dashboard...`, 'yellow')
       setProgress(100)
       
-      // Navigate to dashboard anyway (it will use fallback data)
+      // Navigate to dashboard with error state
       setTimeout(() => {
-        navigate(`/dashboard/${ticker}?company=${encodeURIComponent(company)}`)
+        navigate(`/dashboard/${ticker}?company=${encodeURIComponent(company)}`, {
+          state: { 
+            analysisData: null,
+            ticker,
+            company,
+            error: err.message,
+          }
+        })
       }, 2000)
     }
   }, [ticker, company, addLine, navigate])

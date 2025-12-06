@@ -452,29 +452,70 @@ export async function runAnalysisPipeline(query, onStatusChange = () => {}) {
     try {
       // Get source documents from the analysis session
       const reportResult = await generateAnalysisReport(harvestedData, sessionId, intent.company, intent.ticker);
-      analysisReport = reportResult.report;
+      // Include both the report data and the PDF data URL
+      analysisReport = {
+        report: reportResult.report,
+        pdfDataUrl: reportResult.pdfDataUrl,
+        meta: reportResult.meta,
+      };
       console.log('[Pipeline] Step 4.5 complete:', {
-        hasReport: !!analysisReport,
-        strengths: analysisReport?.keyStrengths?.length || 0,
-        risks: analysisReport?.keyRisks?.length || 0,
+        hasReport: !!analysisReport.report,
+        hasPdfDataUrl: !!analysisReport.pdfDataUrl,
+        strengths: analysisReport.report?.keyStrengths?.length || 0,
+        risks: analysisReport.report?.keyRisks?.length || 0,
       });
     } catch (reportError) {
       console.warn('[Pipeline] Step 4.5: Analysis report generation skipped:', reportError.message);
       // Continue without report - not critical
     }
     
-    // Step 5: Synthesize audio (optional - gracefully handle if unavailable)
-    console.log('[Pipeline] Step 5: Synthesizing audio...');
-    onStatusChange('synthesizing_audio', 'Creating audio podcast...');
+    // Step 5: Generate broadcast audio (auto-generate from report)
+    console.log('[Pipeline] Step 5: Generating broadcast audio...');
+    onStatusChange('generating_broadcast', 'Creating audio broadcast...');
+    let broadcastAudioUrl = null;
+    try {
+      if (analysisReport?.report) {
+        // Generate narrative script
+        const scriptResponse = await fetchAPI('/api/broadcast/generate-script', {
+          method: 'POST',
+          body: JSON.stringify({
+            analysisReport,
+            keyInsights: [],
+            ticker: intent.ticker,
+            company: intent.company
+          }),
+        });
+        
+        if (scriptResponse.script) {
+          // Synthesize audio
+          const audioResponse = await fetch(`${API_BASE_URL}/api/broadcast/synthesize`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ script: scriptResponse.script }),
+          });
+          
+          if (audioResponse.ok) {
+            const audioBlob = await audioResponse.blob();
+            broadcastAudioUrl = URL.createObjectURL(audioBlob);
+            console.log('[Pipeline] Step 5 complete: Broadcast audio generated');
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[Pipeline] Step 5: Broadcast audio generation skipped:', error.message);
+    }
+
+    // Step 6: Synthesize debate audio (optional)
+    console.log('[Pipeline] Step 6: Synthesizing debate audio...');
+    onStatusChange('synthesizing_audio', 'Creating debate podcast...');
     let audioResult = null;
     try {
       audioResult = await synthesizeAudio(debateResult.script, sessionId);
-      console.log('[Pipeline] Step 5 complete:', { 
+      console.log('[Pipeline] Step 6 complete:', { 
         audioUrl: audioResult?.audioUrl || 'none',
       });
     } catch (error) {
-      console.warn('[Pipeline] Step 5: Audio synthesis unavailable:', error.message);
-      // Audio is optional - continue without it
+      console.warn('[Pipeline] Step 6: Debate audio synthesis unavailable:', error.message);
     }
 
     onStatusChange('complete', 'Analysis complete!');
@@ -489,7 +530,8 @@ export async function runAnalysisPipeline(query, onStatusChange = () => {}) {
         pdfSearch: pdfResults.results?.length > 0 ? '✓' : '⚠ no results',
         harvest: harvestedData ? '✓' : '⚠ limited data',
         debate: '✓',
-        audio: audioResult ? '✓' : '⚠ unavailable',
+        broadcast: broadcastAudioUrl ? '✓' : '⚠ unavailable',
+        debateAudio: audioResult ? '✓' : '⚠ unavailable',
       },
     });
   
@@ -500,6 +542,7 @@ export async function runAnalysisPipeline(query, onStatusChange = () => {}) {
       harvestedData,
       debateScript: debateResult.script,
       analysisReport: analysisReport,
+      broadcastAudioUrl,
       audioUrl: audioResult?.audioUrl || null,
       meta: debateResult.meta,
     };

@@ -5,30 +5,27 @@ import {
   Eye, 
   Download,
   ChevronRight,
-  Sparkles,
-  BarChart3
+  BarChart3,
+  TrendingUp,
+  TrendingDown
 } from 'lucide-react'
 
 export default function AnalysisReportViewer({ analysisData, ticker }) {
-  const sessionId = analysisData?.sessionId
   const [isExpanded, setIsExpanded] = useState(false)
-  const [isHovered, setIsHovered] = useState(false)
 
-  // Check if we have an analysis report
   const hasReport = analysisData?.analysisReport
+  const report = analysisData?.analysisReport?.report || analysisData?.analysisReport
+  const pdfDataUrl = analysisData?.analysisReport?.pdfDataUrl
 
   if (!hasReport) {
     return (
       <div className="flex flex-col h-full">
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
           <div className="flex items-center gap-2">
             <BarChart3 size={18} className="text-purple-400" />
             <h2 className="font-semibold text-purple-300">Analysis Report</h2>
           </div>
         </div>
-
-        {/* Empty state */}
         <div className="flex-1 flex flex-col items-center justify-center py-12 text-gray-500">
           <FileText size={32} className="mb-3 opacity-50" />
           <p className="text-sm">No analysis report available</p>
@@ -38,7 +35,23 @@ export default function AnalysisReportViewer({ analysisData, ticker }) {
     )
   }
 
-  const report = analysisData.analysisReport
+  const handleViewReport = (e) => {
+    e.stopPropagation()
+    if (pdfDataUrl) {
+      // Open PDF in new tab
+      window.open(pdfDataUrl, '_blank')
+    }
+  }
+
+  const handleDownload = (e) => {
+    e.stopPropagation()
+    if (pdfDataUrl) {
+      const link = document.createElement('a')
+      link.href = pdfDataUrl
+      link.download = `${ticker}_Analysis_Report.pdf`
+      link.click()
+    }
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -48,56 +61,43 @@ export default function AnalysisReportViewer({ analysisData, ticker }) {
           <BarChart3 size={18} className="text-purple-400" />
           <h2 className="font-semibold text-purple-300">Analysis Report</h2>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-purple-400 bg-purple-500/10 px-2 py-1 rounded-full flex items-center gap-1">
-            <Sparkles size={10} />
-            AI Generated
-          </span>
-        </div>
+        {pdfDataUrl && (
+          <button
+            onClick={handleViewReport}
+            className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors"
+          >
+            <Eye size={12} />
+            View PDF
+          </button>
+        )}
       </div>
 
       {/* Report Card */}
       <div className="flex-1 overflow-y-auto p-3 scrollbar-thin">
         <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.1 }}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
           className={`relative p-3 rounded-xl border transition-all cursor-pointer ${
             isExpanded
               ? 'bg-purple-500/10 border-purple-500/30' 
-              : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.05] hover:border-white/10'
+              : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.04]'
           }`}
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
           onClick={() => setIsExpanded(!isExpanded)}
         >
           <div className="flex items-start gap-3">
-            {/* Icon */}
             <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400">
               <FileText size={16} />
             </div>
 
-            {/* Content */}
             <div className="flex-1 min-w-0">
               <h3 className="text-sm font-medium text-white truncate pr-2">
-                {ticker} Investment Analysis Report
+                {ticker} Investment Analysis
               </h3>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400">
-                  Analysis Report
-                </span>
-                <span className="text-xs text-gray-500">
-                  PDF Format
-                </span>
-              </div>
-              {sessionId && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Session: {sessionId.substring(0, 8)}...
-                </p>
-              )}
+              <p className="text-xs text-gray-500 mt-0.5">
+                PDF Report • AI Generated
+              </p>
             </div>
 
-            {/* Action indicator */}
             <motion.div
               animate={{ rotate: isExpanded ? 90 : 0 }}
               transition={{ duration: 0.2 }}
@@ -106,7 +106,7 @@ export default function AnalysisReportViewer({ analysisData, ticker }) {
             </motion.div>
           </div>
 
-          {/* Expanded Preview and Actions */}
+          {/* Expanded Content */}
           <AnimatePresence>
             {isExpanded && (
               <motion.div
@@ -116,61 +116,44 @@ export default function AnalysisReportViewer({ analysisData, ticker }) {
                 transition={{ duration: 0.2 }}
                 className="overflow-hidden"
               >
-                {/* Report Preview */}
-                <div className="mt-3 pt-3 border-t border-white/10">
-                  <div className="space-y-3 text-xs">
-                    {/* Executive Summary Preview */}
-                    {report.summary && (
-                      <div className="p-2 rounded-lg bg-purple-500/5 border border-purple-500/10">
-                        <p className="font-medium text-purple-300 mb-1">Executive Summary</p>
-                        <p className="text-gray-400 line-clamp-2">{report.summary}</p>
-                      </div>
-                    )}
+                <div className="mt-3 pt-3 border-t border-white/10 space-y-3">
+                  {/* Summary Preview */}
+                  {report?.summary && (
+                    <p className="text-xs text-gray-400 line-clamp-3">
+                      {report.summary}
+                    </p>
+                  )}
 
-                    {/* Key Metrics Preview */}
-                    <div className="grid grid-cols-2 gap-2">
-                      {report.keyStrengths && (
-                        <div className="p-2 rounded-lg bg-green-500/5 border border-green-500/10">
-                          <p className="font-medium text-green-400">{report.keyStrengths.length}</p>
-                          <p className="text-gray-500">Strengths</p>
-                        </div>
-                      )}
-                      {report.keyRisks && (
-                        <div className="p-2 rounded-lg bg-orange-500/5 border border-orange-500/10">
-                          <p className="font-medium text-orange-400">{report.keyRisks.length}</p>
-                          <p className="text-gray-500">Risks</p>
-                        </div>
-                      )}
+                  {/* Stats */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex items-center gap-2 p-2 rounded-lg bg-white/[0.02]">
+                      <TrendingUp size={12} className="text-green-400" />
+                      <span className="text-xs text-gray-400">
+                        {report?.keyStrengths?.length || 0} Strengths
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 p-2 rounded-lg bg-white/[0.02]">
+                      <TrendingDown size={12} className="text-red-400" />
+                      <span className="text-xs text-gray-400">
+                        {report?.keyRisks?.length || 0} Risks
+                      </span>
                     </div>
                   </div>
 
-                  {/* Action Buttons */}
-                  <div className="flex gap-2 mt-3">
+                  {/* Actions */}
+                  <div className="flex gap-2">
                     <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Open in new tab to view
-                        const url = `http://localhost:3001/api/analysis/download-pdf?sessionId=${sessionId}&ticker=${ticker}`;
-                        window.open(url, '_blank', 'noopener,noreferrer');
-                      }}
-                      className="flex-1 flex items-center justify-center gap-2 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-lg text-purple-400 text-xs transition-all"
+                      onClick={handleViewReport}
+                      disabled={!pdfDataUrl}
+                      className="flex-1 flex items-center justify-center gap-2 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-lg text-purple-400 text-xs transition-all disabled:opacity-50"
                     >
                       <Eye size={14} />
                       View Report
                     </button>
                     <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Trigger download
-                        const url = `http://localhost:3001/api/analysis/download-pdf?sessionId=${sessionId}&ticker=${ticker}`;
-                        const link = document.createElement('a');
-                        link.href = url;
-                        link.download = `${ticker}_Analysis_Report.pdf`;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                      }}
-                      className="flex-1 flex items-center justify-center gap-2 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-gray-400 text-xs transition-all"
+                      onClick={handleDownload}
+                      disabled={!pdfDataUrl}
+                      className="flex-1 flex items-center justify-center gap-2 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-gray-400 text-xs transition-all disabled:opacity-50"
                     >
                       <Download size={14} />
                       Download
@@ -180,58 +163,25 @@ export default function AnalysisReportViewer({ analysisData, ticker }) {
               </motion.div>
             )}
           </AnimatePresence>
-
-          {/* Hover glow effect */}
-          {isHovered && (
-            <motion.div
-              className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-transparent rounded-xl pointer-events-none"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            />
-          )}
         </motion.div>
 
-        {/* Report Sections Preview (when collapsed) */}
-        {!isExpanded && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="mt-3 space-y-2"
-          >
-            <p className="text-xs text-gray-500 px-2">Report includes:</p>
-            <div className="space-y-1">
-              {[
-                { label: 'Executive Summary', color: 'cyan' },
-                { label: 'Financial Analysis', color: 'yellow' },
-                { label: 'Key Strengths', color: 'green' },
-                { label: 'Risk Assessment', color: 'orange' },
-                { label: 'Market Outlook', color: 'fuchsia' },
-                { label: 'Recommendation', color: 'purple' }
-              ].map((section, index) => (
-                <motion.div
-                  key={section.label}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.3 + index * 0.05 }}
-                  className={`flex items-center gap-2 px-2 py-1.5 rounded-lg bg-${section.color}-500/5 border border-${section.color}-500/10`}
-                >
-                  <div className={`w-1.5 h-1.5 rounded-full bg-${section.color}-400`} />
-                  <span className="text-xs text-gray-400">{section.label}</span>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
+        {/* Quick Stats when collapsed */}
+        {!isExpanded && report && (
+          <div className="mt-3 space-y-2">
+            {report.keyStrengths?.slice(0, 2).map((strength, i) => (
+              <div key={i} className="flex items-start gap-2 px-2 py-1.5 text-xs text-gray-500">
+                <TrendingUp size={10} className="text-green-400/60 mt-0.5 flex-shrink-0" />
+                <span className="line-clamp-1">{strength}</span>
+              </div>
+            ))}
+            {report.keyRisks?.slice(0, 1).map((risk, i) => (
+              <div key={i} className="flex items-start gap-2 px-2 py-1.5 text-xs text-gray-500">
+                <TrendingDown size={10} className="text-red-400/60 mt-0.5 flex-shrink-0" />
+                <span className="line-clamp-1">{risk}</span>
+              </div>
+            ))}
+          </div>
         )}
-      </div>
-
-      {/* Footer */}
-      <div className="px-4 py-3 border-t border-white/10 bg-white/[0.02]">
-        <div className="flex items-center justify-center gap-2 text-xs text-gray-500">
-          <Sparkles size={12} className="text-purple-400" />
-          <span>Generated by AI Analysis Engine</span>
-        </div>
       </div>
     </div>
   )

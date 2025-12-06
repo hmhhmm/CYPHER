@@ -10,19 +10,29 @@ const VOICES = {
   bear: 'EXAVITQu4vr4xnSDxMaL'   // Sarah - soft American female, smooth and warm
 };
 
-// Voice settings for smooth natural flow
+/**
+ * Humanized Voice Settings
+ * 
+ * Key insight: Lower stability = more human-like fluctuations and emotion
+ * Standard AI voices use ~0.7 stability which sounds robotic
+ * We use 0.35 to force natural voice fluctuations
+ * 
+ * Acoustic goal: Generate speech with audible breaths, subtle mouth clicks,
+ * varying pacing. Avoid 'News Anchor' prosody. Conversational and candid tone,
+ * as if recorded in a room, not a sterile studio.
+ */
 const VOICE_SETTINGS = {
   bull: {
-    stability: 0.65,           // Smooth and consistent
-    similarity_boost: 0.8,    
-    style: 0.3,                // Natural, not dramatic
-    use_speaker_boost: false   // Softer without boost
+    stability: 0.35,            // LOW - forces voice to fluctuate, adds emotion/imperfections
+    similarity_boost: 0.75,     // Keep voice recognizable but allow variation
+    style: 0.85,                // HIGH style exaggeration for expressiveness
+    use_speaker_boost: true     // Enhanced presence
   },
   bear: {
-    stability: 0.6,
-    similarity_boost: 0.75,
-    style: 0.55,
-    use_speaker_boost: true
+    stability: 0.35,            // LOW - more human-like, less robotic
+    similarity_boost: 0.75,     // Balanced similarity
+    style: 0.9,                 // HIGH style for dramatic skeptical tone
+    use_speaker_boost: true     // Enhanced presence
   }
 };
 

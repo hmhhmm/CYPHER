@@ -479,6 +479,125 @@ export default function Landing() {
             </AnimatePresence>
           </div>
         </motion.div>
+
+        {/* Features Section - Below the fold */}
+        <AnimatePresence>
+          {!hasStarted && (
+            <motion.div 
+              className="w-full px-4 py-24 border-t border-white/5"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ delay: 0.3 }}
+            >
+              <div className="max-w-5xl mx-auto">
+                <motion.div 
+                  className="text-center mb-16"
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                >
+                  <h2 className="text-2xl md:text-3xl font-bold text-white mb-3">
+                    Institutional-Grade Analysis
+                  </h2>
+                  <p className="text-gray-500 max-w-xl mx-auto">
+                    Real-time SEC filings, AI-powered insights, and professional audio summaries
+                  </p>
+                </motion.div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Feature 1 */}
+                  <motion.div 
+                    className="p-6 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-purple-500/20 transition-all"
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: 0.1 }}
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mb-4">
+                      <Server size={20} className="text-purple-400" />
+                    </div>
+                    <h3 className="text-white font-semibold mb-2">SEC Filing Analysis</h3>
+                    <p className="text-sm text-gray-500 leading-relaxed">
+                      Automatically extracts and analyzes 10-K, 10-Q filings with AI-powered insights on financials, risks, and management discussion.
+                    </p>
+                  </motion.div>
+
+                  {/* Feature 2 */}
+                  <motion.div 
+                    className="p-6 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-purple-500/20 transition-all"
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: 0.2 }}
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mb-4">
+                      <Cpu size={20} className="text-purple-400" />
+                    </div>
+                    <h3 className="text-white font-semibold mb-2">Bull vs Bear Debate</h3>
+                    <p className="text-sm text-gray-500 leading-relaxed">
+                      AI generates balanced investment perspectives with bullish and bearish arguments, synthesized into an audio podcast.
+                    </p>
+                  </motion.div>
+
+                  {/* Feature 3 */}
+                  <motion.div 
+                    className="p-6 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-purple-500/20 transition-all"
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: 0.3 }}
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mb-4">
+                      <Signal size={20} className="text-purple-400" />
+                    </div>
+                    <h3 className="text-white font-semibold mb-2">Daily Broadcast</h3>
+                    <p className="text-sm text-gray-500 leading-relaxed">
+                      Professional audio summaries narrated by AI, covering executive summary, key strengths, risks, and recommendations.
+                    </p>
+                  </motion.div>
+                </div>
+
+                {/* Stats Section */}
+                <motion.div 
+                  className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-6"
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: 0.4 }}
+                >
+                  {[
+                    { value: '10K+', label: 'SEC Filings' },
+                    { value: 'Claude', label: 'AI Model' },
+                    { value: 'Real-time', label: 'Analysis' },
+                    { value: 'Audio', label: 'Podcast' },
+                  ].map((stat, i) => (
+                    <div key={i} className="text-center p-4">
+                      <p className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-violet-400 bg-clip-text text-transparent">
+                        {stat.value}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1 font-mono uppercase tracking-wider">
+                        {stat.label}
+                      </p>
+                    </div>
+                  ))}
+                </motion.div>
+
+                {/* Footer */}
+                <motion.div 
+                  className="mt-16 pt-8 border-t border-white/5 text-center"
+                  initial={{ opacity: 0 }}
+                  whileInView={{ opacity: 1 }}
+                  viewport={{ once: true }}
+                >
+                  <p className="text-xs text-gray-600">
+                    Powered by Claude AI • Built for institutional-grade analysis
+                  </p>
+                </motion.div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </motion.div>
   )

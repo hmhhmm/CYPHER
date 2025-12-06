@@ -1,13 +1,11 @@
 import { useParams, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Zap, Sparkles, AlertCircle, Download } from 'lucide-react'
+import { ArrowLeft, Zap, Sparkles, AlertCircle, Download, RefreshCw } from 'lucide-react'
 import SourceDocuments from '../components/SourceDocuments'
 import PodcastPlayer from '../components/PodcastPlayer'
 import KeyInsights from '../components/KeyInsights'
 import StockChart from '../components/StockChart'
 import AnalysisReportViewer from '../components/AnalysisReportViewer'
-import { getSourceDocuments, getKeyInsights, getTranscript } from '../utils/analyzeRequest'
-import { useAnalysisData } from '../hooks/useAnalysis'
 
 export default function Dashboard() {
   const { ticker: paramTicker } = useParams()
@@ -15,29 +13,37 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   
-  // Get ticker and company from multiple sources (priority: URL params > search params > state > default)
-  const ticker = paramTicker || searchParams.get('ticker') || location.state?.ticker || 'TSLA'
-  const company = searchParams.get('company') || location.state?.company || 'Tesla Inc.'
+  // Get data from location.state (passed from Terminal/Landing after pipeline)
+  const stateData = location.state?.analysisData
   
-  // Load analysis data from Convex
-  const { data: analysisData, loading } = useAnalysisData(ticker)
+  // Get ticker and company from multiple sources
+  const ticker = paramTicker || stateData?.ticker || searchParams.get('ticker') || 'TSLA'
+  const company = stateData?.company || searchParams.get('company') || location.state?.company || 'Company'
   
-  // Determine if we have real data
-  const isRealData = !!(analysisData?.harvestedData && analysisData?.harvestedData !== null)
+  // Check if we have real data from the pipeline
+  const hasRealData = !!(stateData && (stateData.harvestedData || stateData.debateScript))
   
-  // Prepare data - use documents from useAnalysisData (already formatted with sourceDocuments)
-  // This will show 4-5 PDFs from Apify with real titles
-  const documents = analysisData?.documents || getSourceDocuments(ticker)
+  console.log('[Dashboard] State data:', {
+    hasStateData: !!stateData,
+    ticker,
+    company,
+    hasHarvestedData: !!stateData?.harvestedData,
+    hasDebateScript: !!stateData?.debateScript,
+    debateScriptLength: stateData?.debateScript?.length,
+    hasAnalysisReport: !!stateData?.analysisReport,
+  })
   
-  const insights = analysisData?.harvestedData 
-    ? generateInsightsFromHarvested(analysisData.harvestedData)
-    : getKeyInsights(ticker)
+  // Build documents from harvestedData
+  const documents = buildDocuments(stateData, ticker)
   
-  // Always use the new conversational mock transcripts for consistent human-like voice
-  const transcript = getTranscript(ticker)
-
-  // Format price with currency (if available from analysis data)
-  const currentPrice = analysisData?.currentPrice || null
+  // Build insights from harvestedData
+  const insights = buildInsights(stateData)
+  
+  // Build transcript from debateScript
+  const transcript = normalizeDebateScript(stateData?.debateScript)
+  
+  // Format price with currency (if available)
+  const currentPrice = stateData?.meta?.currentPrice || null
 
   return (
     <motion.div 
@@ -85,7 +91,7 @@ export default function Dashboard() {
 
         <div className="flex items-center gap-3">
           {/* Data source indicator */}
-          {isRealData ? (
+          {hasRealData ? (
             <motion.div 
               className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-full"
               initial={{ scale: 0 }}
@@ -101,7 +107,7 @@ export default function Dashboard() {
               animate={{ scale: 1 }}
             >
               <AlertCircle size={12} className="text-yellow-400" />
-              <span className="text-xs text-yellow-400 font-medium">AI</span>
+              <span className="text-xs text-yellow-400 font-medium">No Data</span>
             </motion.div>
           )}
           
@@ -120,11 +126,16 @@ export default function Dashboard() {
           </div>
           
           {/* Download Analysis Report Button */}
-          {analysisData?.analysisReport && analysisData?.sessionId && (
+          {stateData?.analysisReport && (
             <motion.button
               onClick={() => {
-                const url = `http://localhost:3001/api/analysis/download-pdf?sessionId=${analysisData.sessionId}&ticker=${ticker}`;
-                window.open(url, '_blank');
+                // If we have a direct PDF data URL, use it
+                if (stateData.analysisReport.pdfDataUrl) {
+                  const link = document.createElement('a')
+                  link.href = stateData.analysisReport.pdfDataUrl
+                  link.download = `${ticker}_Analysis_Report.pdf`
+                  link.click()
+                }
               }}
               className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-full transition-all"
               whileHover={{ scale: 1.05 }}
@@ -136,6 +147,32 @@ export default function Dashboard() {
           )}
         </div>
       </motion.header>
+
+      {/* No Data Warning */}
+      {!hasRealData && (
+        <motion.div 
+          className="mb-4 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <div className="flex items-center gap-3">
+            <AlertCircle size={20} className="text-yellow-400" />
+            <div className="flex-1">
+              <p className="text-yellow-400 text-sm font-medium">No analysis data available</p>
+              <p className="text-gray-400 text-xs mt-1">Run a new analysis from the home page to see real data.</p>
+            </div>
+            <motion.button
+              onClick={() => navigate('/')}
+              className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/30 rounded-lg text-purple-400 text-sm"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <RefreshCw size={14} />
+              New Analysis
+            </motion.button>
+          </div>
+        </motion.div>
+      )}
 
       {/* 3-Column Bento Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-[calc(100vh-200px)]">
@@ -153,7 +190,7 @@ export default function Dashboard() {
           
           {/* Analysis Report - Takes 40% height */}
           <div className="bento-card flex-[2] min-h-0 overflow-hidden">
-            <AnalysisReportViewer analysisData={analysisData} ticker={ticker} />
+            <AnalysisReportViewer analysisData={stateData} ticker={ticker} />
           </div>
         </motion.div>
 
@@ -167,6 +204,9 @@ export default function Dashboard() {
           <PodcastPlayer 
             ticker={ticker}
             transcript={transcript}
+            analysisReport={stateData?.analysisReport}
+            keyInsights={insights}
+            broadcastAudioUrl={stateData?.broadcastAudioUrl}
           />
         </motion.div>
 
@@ -193,46 +233,72 @@ export default function Dashboard() {
 }
 
 /**
- * Generate document list from harvested data
+ * Build documents from pipeline result
  */
-function generateDocumentsFromHarvested(harvestedData, ticker) {
-  const { meta } = harvestedData
-  return [
-    { 
-      id: 1, 
-      name: `${ticker} ${meta.period} ${meta.report_type}.pdf`, 
-      type: 'SEC Filing', 
-      pages: 142, 
-      date: new Date().toISOString().split('T')[0],
-      url: meta.source_url
-    },
-  ]
+function buildDocuments(stateData, ticker) {
+  if (!stateData) return []
+  
+  const docs = []
+  
+  // Add source PDF from harvestedData
+  if (stateData.harvestedData?.meta) {
+    const { meta } = stateData.harvestedData
+    docs.push({
+      id: 1,
+      name: `${ticker} ${meta.report_type || '10-K'} Filing`,
+      type: 'SEC Filing',
+      url: meta.source_url,
+      source: 'SEC EDGAR',
+    })
+  }
+  
+  // Add any additional source documents passed from pipeline
+  if (stateData.sourceDocuments && Array.isArray(stateData.sourceDocuments)) {
+    stateData.sourceDocuments.forEach((doc, i) => {
+      if (!docs.some(d => d.url === doc.url)) {
+        docs.push({
+          id: docs.length + 1,
+          name: doc.title || doc.name || `Source ${i + 1}`,
+          type: doc.type || 'Document',
+          url: doc.url,
+          source: doc.source || 'Web',
+        })
+      }
+    })
+  }
+  
+  // Add analysis report as a document if available
+  if (stateData.analysisReport) {
+    docs.push({
+      id: docs.length + 1,
+      name: `${ticker} AI Analysis Report`,
+      type: 'CYPHER Report',
+      url: stateData.analysisReport.pdfDataUrl || '#',
+      source: 'CYPHER AI',
+    })
+  }
+  
+  return docs
 }
 
 /**
- * Generate insights from harvested data using AI-extracted content
+ * Build insights from harvestedData content
  */
-function generateInsightsFromHarvested(harvestedData) {
-  const { content } = harvestedData
+function buildInsights(stateData) {
+  if (!stateData?.harvestedData?.content) return []
+  
+  const { content } = stateData.harvestedData
   const insights = []
   
   // Parse management discussion for bullish points
   if (content.management_discussion) {
     const mda = content.management_discussion.toLowerCase()
     
-    if (mda.includes('growth') || mda.includes('increase') || mda.includes('strong')) {
+    if (mda.includes('growth') || mda.includes('increase') || mda.includes('strong') || mda.includes('revenue')) {
       insights.push({
         type: 'bullish',
         title: 'Growth Momentum',
-        text: extractSentence(content.management_discussion, ['growth', 'increase', 'strong', 'record'])
-      })
-    }
-    
-    if (mda.includes('revenue') || mda.includes('profit')) {
-      insights.push({
-        type: 'bullish',
-        title: 'Financial Performance',
-        text: extractSentence(content.management_discussion, ['revenue', 'profit', 'margin'])
+        text: extractSentence(content.management_discussion, ['growth', 'increase', 'strong', 'record', 'revenue'])
       })
     }
   }
@@ -241,39 +307,43 @@ function generateInsightsFromHarvested(harvestedData) {
   if (content.risk_factors) {
     const risks = content.risk_factors.toLowerCase()
     
-    if (risks.includes('competition') || risks.includes('competitive')) {
+    if (risks.includes('competition') || risks.includes('risk') || risks.includes('uncertainty')) {
       insights.push({
         type: 'bearish',
-        title: 'Competitive Pressure',
-        text: extractSentence(content.risk_factors, ['competition', 'competitive', 'competitors'])
-      })
-    }
-    
-    if (risks.includes('regulation') || risks.includes('regulatory') || risks.includes('compliance')) {
-      insights.push({
-        type: 'bearish',
-        title: 'Regulatory Risks',
-        text: extractSentence(content.risk_factors, ['regulation', 'regulatory', 'compliance'])
+        title: 'Key Risks',
+        text: extractSentence(content.risk_factors, ['competition', 'risk', 'uncertainty', 'challenge'])
       })
     }
   }
   
-  // Parse financials for neutral/mixed insights
+  // Parse financials for metrics
   if (content.key_financials) {
     insights.push({
       type: 'neutral',
-      title: 'Key Metrics',
-      text: content.key_financials.split('\n')[0] || 'Financial metrics available in the report.'
+      title: 'Financial Metrics',
+      text: content.key_financials.split('\n')[0]?.trim() || 'See report for detailed financials.'
     })
   }
   
-  // Ensure we have at least 3 insights
-  if (insights.length < 3) {
-    insights.push({
-      type: 'neutral',
-      title: 'Analyst View',
-      text: 'Review the full SEC filing for comprehensive analysis.'
-    })
+  // Add insights from analysisReport if available
+  if (stateData.analysisReport?.report) {
+    const report = stateData.analysisReport.report
+    
+    if (report.keyStrengths?.length > 0) {
+      insights.push({
+        type: 'bullish',
+        title: 'Key Strength',
+        text: report.keyStrengths[0]
+      })
+    }
+    
+    if (report.keyRisks?.length > 0) {
+      insights.push({
+        type: 'bearish',
+        title: 'Risk Factor',
+        text: report.keyRisks[0]
+      })
+    }
   }
   
   return insights.slice(0, 4)
@@ -283,6 +353,8 @@ function generateInsightsFromHarvested(harvestedData) {
  * Extract a relevant sentence containing keywords
  */
 function extractSentence(text, keywords) {
+  if (!text) return 'See full report for details.'
+  
   const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 10)
   
   for (const sentence of sentences) {
@@ -293,7 +365,6 @@ function extractSentence(text, keywords) {
     }
   }
   
-  // Fallback to first sentence
   return sentences[0]?.trim().substring(0, 150) || 'See full report for details.'
 }
 
@@ -302,8 +373,11 @@ function extractSentence(text, keywords) {
  */
 function normalizeDebateScript(debateScript) {
   if (!debateScript || !Array.isArray(debateScript)) {
+    console.log('[Dashboard] No debate script to normalize')
     return []
   }
+  
+  console.log('[Dashboard] Normalizing debate script:', debateScript.length, 'lines')
   
   let currentTime = 0
   return debateScript.map((line, index) => {

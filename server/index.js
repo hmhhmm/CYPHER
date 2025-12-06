@@ -20,6 +20,7 @@ import audioRoutes from './routes/audio.js';
 import newsRoutes from './routes/news.js';
 import pipelineRoutes from './routes/pipeline.js';
 import analysisRoutes from './routes/analysis.js';
+import broadcastRoutes from './routes/broadcast.js';
 
 // Load environment variables from multiple possible locations
 // Try server/.env first, then root .env
@@ -329,6 +330,7 @@ app.use('/api/analysis', analysisRoutes);
 app.use('/api/audio', audioRoutes);
 app.use('/api/news', newsRoutes);
 app.use('/api/pipeline', pipelineRoutes);
+app.use('/api/broadcast', broadcastRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
