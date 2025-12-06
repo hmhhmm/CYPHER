@@ -1,16 +1,13 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   BarChart3, 
   TrendingUp, 
   TrendingDown,
-  Clock, 
-  RefreshCw,
   Maximize2,
   X,
   Activity,
-  Crosshair,
   Target,
   Bell,
   Minus,
@@ -18,24 +15,8 @@ import {
   LineChart,
   CandlestickChart as CandleIcon,
   AreaChart,
-  Trash2,
-  DollarSign,
-  ShoppingCart,
-  Tag
+  Trash2
 } from 'lucide-react'
-
-// Known valid TradingView symbols (common US stocks)
-const VALID_SYMBOLS = new Set([
-  'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'NVDA', 'META', 'TSLA', 'BRK.A', 'BRK.B',
-  'JPM', 'JNJ', 'V', 'PG', 'UNH', 'HD', 'MA', 'DIS', 'PYPL', 'BAC', 'NFLX', 'ADBE',
-  'CRM', 'CMCSA', 'XOM', 'VZ', 'INTC', 'T', 'PFE', 'KO', 'PEP', 'MRK', 'WMT', 'ABT',
-  'CVX', 'TMO', 'AVGO', 'COST', 'NKE', 'MCD', 'DHR', 'MDT', 'ACN', 'NEE', 'LLY',
-  'AMD', 'QCOM', 'TXN', 'UPS', 'PM', 'MS', 'HON', 'ORCL', 'IBM', 'GS', 'BA', 'CAT',
-  'SBUX', 'GE', 'MMM', 'AMGN', 'INTU', 'BLK', 'ISRG', 'AMAT', 'GILD', 'AXP', 'BKNG',
-  'LRCX', 'TGT', 'SYK', 'ADP', 'ZTS', 'MDLZ', 'CI', 'TMUS', 'CB', 'MO', 'SPGI', 'PLD',
-  'NOW', 'SCHW', 'CME', 'BDX', 'CSX', 'DUK', 'CL', 'USB', 'EQIX', 'SO', 'AON', 'ITW',
-  'SNOW', 'PLTR', 'COIN', 'SQ', 'UBER', 'LYFT', 'ABNB', 'RBLX', 'HOOD', 'RIVN', 'LCID'
-])
 
 // Time period configurations
 const TIME_PERIODS = {
@@ -116,148 +97,36 @@ function formatVolume(num) {
 }
 
 export default function StockChart({ ticker }) {
-  const containerRef = useRef(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [useFallback, setUseFallback] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
 
-  // Check if ticker is likely valid on TradingView
-  const isValidSymbol = VALID_SYMBOLS.has(ticker?.toUpperCase())
-
-  useEffect(() => {
-    // If not a known valid symbol, use fallback immediately
-    if (!isValidSymbol) {
-      setUseFallback(true)
-      setIsLoading(false)
-      return
-    }
-
-    // Try to load TradingView widget
-    const loadTradingViewWidget = () => {
-      if (!containerRef.current) return
-      
-      // Clear previous widget
-      containerRef.current.innerHTML = ''
-      setIsLoading(true)
-      setUseFallback(false)
-
-      try {
-        // Create TradingView widget script
-        const script = document.createElement('script')
-        script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js'
-        script.type = 'text/javascript'
-        script.async = true
-        script.innerHTML = JSON.stringify({
-          "autosize": true,
-          "symbol": `NASDAQ:${ticker}`,
-          "interval": "D",
-          "timezone": "Etc/UTC",
-          "theme": "dark",
-          "style": "1",
-          "locale": "en",
-          "backgroundColor": "rgba(0, 0, 0, 0)",
-          "gridColor": "rgba(138, 43, 226, 0.06)",
-          "hide_top_toolbar": false,
-          "hide_legend": false,
-          "allow_symbol_change": false,
-          "save_image": false,
-          "calendar": false,
-          "support_host": "https://www.tradingview.com"
-        })
-
-        script.onload = () => {
-          setIsLoading(false)
-        }
-
-        script.onerror = () => {
-          setUseFallback(true)
-          setIsLoading(false)
-        }
-
-        // Create widget container
-        const widgetContainer = document.createElement('div')
-        widgetContainer.className = 'tradingview-widget-container'
-        widgetContainer.style.cssText = 'height: 100%; width: 100%; position: absolute; top: 0; left: 0; overflow: hidden;'
-
-        const widgetInner = document.createElement('div')
-        widgetInner.className = 'tradingview-widget-container__widget'
-        widgetInner.style.cssText = 'height: 100%; width: 100%;'
-
-        widgetContainer.appendChild(widgetInner)
-        widgetContainer.appendChild(script)
-        containerRef.current.appendChild(widgetContainer)
-
-        // Fallback timeout - if widget takes too long, use fallback
-        const timeout = setTimeout(() => {
-          setIsLoading(false)
-        }, 5000)
-
-        return () => clearTimeout(timeout)
-
-      } catch (err) {
-        console.error('TradingView widget error:', err)
-        setUseFallback(true)
-        setIsLoading(false)
-      }
-    }
-
-    loadTradingViewWidget()
-
-    return () => {
-      if (containerRef.current) {
-        containerRef.current.innerHTML = ''
-      }
-    }
-  }, [ticker, isValidSymbol])
+  // Always use the custom professional chart for all tickers
 
   return (
     <>
       <div className="flex flex-col h-full overflow-hidden">
         {/* Header */}
-        <div className="flex-shrink-0 flex items-center justify-between px-5 py-4 border-b border-white/10">
+        <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-white/10">
           <div className="flex items-center gap-2">
-            <BarChart3 size={18} className="text-purple-400" />
-            <h2 className="font-semibold text-white">Real-Time Chart</h2>
-          </div>
-          <div className="flex items-center gap-2">
+            <BarChart3 size={16} className="text-purple-400" />
+            <h2 className="font-semibold text-white text-sm">Chart</h2>
             <span className="text-xs text-gray-500 font-mono">{ticker}</span>
-            <motion.button 
-              onClick={() => setIsModalOpen(true)}
-              className="p-1.5 rounded-lg bg-white/5 hover:bg-purple-500/20 text-gray-400 hover:text-purple-400 transition-all"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <Maximize2 size={14} />
-            </motion.button>
           </div>
+          <motion.button 
+            onClick={() => setIsModalOpen(true)}
+            className="p-1.5 rounded-lg bg-white/5 hover:bg-purple-500/20 text-gray-400 hover:text-purple-400 transition-all flex items-center gap-1"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Maximize2 size={12} />
+            <span className="text-xs">Expand</span>
+          </motion.button>
         </div>
 
-        {/* Chart Container */}
+        {/* Chart Container - Always use custom chart */}
         <div className="flex-1 relative min-h-0 overflow-hidden">
-          {/* Show TradingView Widget OR Fallback - never both */}
-          {useFallback ? (
-            <div className="absolute inset-0 bg-[#0a0a0a]">
-              <CandlestickChart ticker={ticker} compact />
-            </div>
-          ) : (
-            <div 
-              ref={containerRef} 
-              className="absolute inset-0 overflow-hidden"
-            />
-          )}
-
-          {/* Loading State */}
-          {isLoading && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm z-10">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-              >
-                <RefreshCw size={24} className="text-purple-400" />
-              </motion.div>
-              <p className="text-sm text-gray-400 mt-2">Loading chart...</p>
-            </div>
-          )}
+          <div className="absolute inset-0 bg-[#080808]">
+            <CandlestickChart ticker={ticker} compact />
+          </div>
         </div>
       </div>
 
@@ -381,10 +250,10 @@ function CandlestickChart({ ticker, compact = false, expanded = false }) {
   
   const chartHeight = expanded ? 480 : compact ? 140 : 180
   const chartWidth = expanded ? 1100 : compact ? 350 : 400
-  const candleWidth = Math.max(4, (expanded ? 12 : compact ? 10 : 10) / zoomLevel)
-  const candleGap = Math.max(2, (expanded ? 5 : compact ? 4 : 4) / zoomLevel)
-  const leftPadding = expanded ? 55 : 35
-  const rightPadding = expanded ? 70 : 55
+  const candleWidth = Math.max(4, (expanded ? 14 : compact ? 12 : 11) / zoomLevel)
+  const candleGap = Math.max(1, (expanded ? 3 : compact ? 2 : 2) / zoomLevel)
+  const leftPadding = expanded ? 45 : 30
+  const rightPadding = expanded ? 55 : 45
   
   const scaleY = useCallback((price) => {
     return chartHeight - ((price - minPrice + padding) / (priceRange + padding * 2)) * chartHeight
@@ -676,17 +545,18 @@ function CandlestickChart({ ticker, compact = false, expanded = false }) {
               <line
                 x1={leftPadding}
                 y1={scaleY(price)}
-                x2={chartWidth - rightPadding}
+                x2={chartWidth - rightPadding + 5}
                 y2={scaleY(price)}
                 stroke="rgba(255, 255, 255, 0.03)"
                 strokeWidth="1"
               />
               <text
-                x={chartWidth - rightPadding + 5}
+                x={chartWidth - 3}
                 y={scaleY(price) + 3}
-                fill="rgba(255, 255, 255, 0.3)"
-                fontSize={expanded ? "10" : "8"}
+                fill="rgba(255, 255, 255, 0.25)"
+                fontSize={expanded ? "9" : "7"}
                 fontFamily="monospace"
+                textAnchor="end"
               >
                 {price.toFixed(0)}
               </text>
@@ -751,24 +621,24 @@ function CandlestickChart({ ticker, compact = false, expanded = false }) {
               <line
                 x1={leftPadding}
                 y1={scaleY(line.price)}
-                x2={chartWidth - rightPadding}
+                x2={chartWidth - 5}
                 y2={scaleY(line.price)}
                 stroke={line.color}
                 strokeWidth="1"
                 strokeDasharray="8,4"
               />
               <rect
-                x={chartWidth - rightPadding + 2}
-                y={scaleY(line.price) - 10}
-                width="60"
-                height="20"
+                x={chartWidth - 52}
+                y={scaleY(line.price) - 9}
+                width="50"
+                height="18"
                 fill={line.color}
-                rx="3"
+                rx="2"
                 className="cursor-pointer"
                 onClick={(e) => { e.stopPropagation(); removePriceLine(line.id) }}
               />
-              <text x={chartWidth - rightPadding + 32} y={scaleY(line.price) + 4} fill="white" fontSize="10" textAnchor="middle" fontFamily="monospace">
-                ${line.price.toFixed(2)}
+              <text x={chartWidth - 27} y={scaleY(line.price) + 4} fill="white" fontSize="9" textAnchor="middle" fontFamily="monospace">
+                {line.price.toFixed(2)}
               </text>
             </g>
           ))}
@@ -779,19 +649,19 @@ function CandlestickChart({ ticker, compact = false, expanded = false }) {
               <line
                 x1={leftPadding}
                 y1={scaleY(alert.price)}
-                x2={chartWidth - rightPadding}
+                x2={chartWidth - 5}
                 y2={scaleY(alert.price)}
                 stroke="#eab308"
                 strokeWidth="1"
                 strokeDasharray="4,4"
               />
-              <g transform={`translate(${leftPadding - 15}, ${scaleY(alert.price)})`}>
-                <circle r="10" fill="#eab308" className="cursor-pointer" onClick={(e) => { e.stopPropagation(); removeAlert(alert.id) }} />
-                <Bell x="-5" y="-5" size={10} color="#000" />
+              <g transform={`translate(${leftPadding + 10}, ${scaleY(alert.price)})`} className="cursor-pointer" onClick={(e) => { e.stopPropagation(); removeAlert(alert.id) }}>
+                <circle r="8" fill="#eab308" />
+                <text x="0" y="3" fill="#000" fontSize="8" textAnchor="middle">🔔</text>
               </g>
-              <rect x={chartWidth - rightPadding + 2} y={scaleY(alert.price) - 10} width="60" height="20" fill="#eab308" rx="3" />
-              <text x={chartWidth - rightPadding + 32} y={scaleY(alert.price) + 4} fill="black" fontSize="10" textAnchor="middle" fontFamily="monospace" fontWeight="bold">
-                ${alert.price.toFixed(2)}
+              <rect x={chartWidth - 52} y={scaleY(alert.price) - 9} width="50" height="18" fill="#eab308" rx="2" />
+              <text x={chartWidth - 27} y={scaleY(alert.price) + 4} fill="black" fontSize="9" textAnchor="middle" fontFamily="monospace" fontWeight="bold">
+                {alert.price.toFixed(2)}
               </text>
             </g>
           ))}
@@ -802,61 +672,61 @@ function CandlestickChart({ ticker, compact = false, expanded = false }) {
               <line
                 x1={leftPadding}
                 y1={scaleY(order.price)}
-                x2={chartWidth - rightPadding}
+                x2={chartWidth - 5}
                 y2={scaleY(order.price)}
                 stroke={order.side === 'buy' ? '#22c55e' : '#ef4444'}
                 strokeWidth="2"
               />
               <rect
                 x={leftPadding}
-                y={scaleY(order.price) - 12}
-                width="80"
-                height="24"
+                y={scaleY(order.price) - 10}
+                width="65"
+                height="20"
                 fill={order.side === 'buy' ? '#22c55e' : '#ef4444'}
-                rx="4"
+                rx="3"
                 className="cursor-pointer"
                 onClick={(e) => { e.stopPropagation(); removeOrder(order.id) }}
               />
-              <text x={leftPadding + 40} y={scaleY(order.price) + 3} fill="white" fontSize="10" textAnchor="middle" fontFamily="monospace" fontWeight="bold">
-                {order.side.toUpperCase()} {order.type.toUpperCase()}
+              <text x={leftPadding + 32} y={scaleY(order.price) + 4} fill="white" fontSize="9" textAnchor="middle" fontFamily="monospace" fontWeight="bold">
+                {order.side.toUpperCase()} {order.type.substring(0,3).toUpperCase()}
               </text>
-              <rect x={chartWidth - rightPadding + 2} y={scaleY(order.price) - 10} width="60" height="20" fill={order.side === 'buy' ? '#22c55e' : '#ef4444'} rx="3" />
-              <text x={chartWidth - rightPadding + 32} y={scaleY(order.price) + 4} fill="white" fontSize="10" textAnchor="middle" fontFamily="monospace" fontWeight="bold">
-                ${order.price.toFixed(2)}
+              <rect x={chartWidth - 52} y={scaleY(order.price) - 9} width="50" height="18" fill={order.side === 'buy' ? '#22c55e' : '#ef4444'} rx="2" />
+              <text x={chartWidth - 27} y={scaleY(order.price) + 4} fill="white" fontSize="9" textAnchor="middle" fontFamily="monospace" fontWeight="bold">
+                {order.price.toFixed(2)}
               </text>
             </g>
           ))}
 
           {/* Crosshair */}
-          {showCrosshair && mousePos.x > leftPadding && mousePos.x < chartWidth - rightPadding && (
+          {showCrosshair && mousePos.x > leftPadding && mousePos.x < chartWidth - 10 && (
             <>
-              <line x1={mousePos.x} y1={0} x2={mousePos.x} y2={chartHeight} stroke="rgba(138, 43, 226, 0.4)" strokeWidth="1" strokeDasharray="4,4" />
-              <line x1={leftPadding} y1={mousePos.y} x2={chartWidth - rightPadding} y2={mousePos.y} stroke="rgba(138, 43, 226, 0.4)" strokeWidth="1" strokeDasharray="4,4" />
-              <rect x={chartWidth - rightPadding + 2} y={mousePos.y - 10} width="60" height="20" fill="rgba(138, 43, 226, 0.9)" rx="3" />
-              <text x={chartWidth - rightPadding + 32} y={mousePos.y + 4} fill="white" fontSize="10" textAnchor="middle" fontFamily="monospace">
-                ${scaleYInverse(mousePos.y).toFixed(2)}
+              <line x1={mousePos.x} y1={0} x2={mousePos.x} y2={chartHeight} stroke="rgba(138, 43, 226, 0.5)" strokeWidth="1" strokeDasharray="3,3" />
+              <line x1={leftPadding} y1={mousePos.y} x2={chartWidth - 5} y2={mousePos.y} stroke="rgba(138, 43, 226, 0.5)" strokeWidth="1" strokeDasharray="3,3" />
+              <rect x={chartWidth - 52} y={mousePos.y - 9} width="50" height="18" fill="rgba(138, 43, 226, 0.95)" rx="2" />
+              <text x={chartWidth - 27} y={mousePos.y + 4} fill="white" fontSize="9" textAnchor="middle" fontFamily="monospace">
+                {scaleYInverse(mousePos.y).toFixed(2)}
               </text>
             </>
           )}
 
           {/* Current price line */}
-          <line x1={leftPadding} y1={scaleY(lastCandle.close)} x2={chartWidth - rightPadding} y2={scaleY(lastCandle.close)} stroke={isPositive ? '#22c55e' : '#ef4444'} strokeWidth="1" strokeDasharray="6,3" opacity="0.6" />
-          <rect x={chartWidth - rightPadding + 2} y={scaleY(lastCandle.close) - 10} width="60" height="20" fill={isPositive ? '#22c55e' : '#ef4444'} rx="3" />
-          <text x={chartWidth - rightPadding + 32} y={scaleY(lastCandle.close) + 4} fill="white" fontSize="10" textAnchor="middle" fontFamily="monospace" fontWeight="bold">
-            ${lastCandle.close.toFixed(2)}
+          <line x1={leftPadding} y1={scaleY(lastCandle.close)} x2={chartWidth - 5} y2={scaleY(lastCandle.close)} stroke={isPositive ? '#22c55e' : '#ef4444'} strokeWidth="1" strokeDasharray="5,3" opacity="0.7" />
+          <rect x={chartWidth - 52} y={scaleY(lastCandle.close) - 9} width="50" height="18" fill={isPositive ? '#22c55e' : '#ef4444'} rx="2" />
+          <text x={chartWidth - 27} y={scaleY(lastCandle.close) + 4} fill="white" fontSize="9" textAnchor="middle" fontFamily="monospace" fontWeight="bold">
+            {lastCandle.close.toFixed(2)}
           </text>
         </svg>
       </div>
 
       {/* Volume bars */}
       {!compact && (
-        <div className={`${expanded ? 'h-16' : 'h-10'} border-t border-white/5`}>
-          <svg className="w-full h-full" viewBox={`0 0 ${chartWidth} ${expanded ? 55 : 35}`} preserveAspectRatio="xMidYMid meet">
-            <text x={leftPadding - 5} y="12" fill="rgba(255,255,255,0.2)" fontSize="8" textAnchor="end">Vol</text>
+        <div className={`${expanded ? 'h-14' : 'h-8'} border-t border-white/5`}>
+          <svg className="w-full h-full" viewBox={`0 0 ${chartWidth} ${expanded ? 50 : 30}`} preserveAspectRatio="xMidYMid meet">
+            <text x="3" y="10" fill="rgba(255,255,255,0.15)" fontSize="7">VOL</text>
             {candleData.map((candle, i) => {
               const x = scaleX(i)
               const maxVol = Math.max(...candleData.map(d => d.volume))
-              const barHeight = expanded ? 45 : 28
+              const barHeight = expanded ? 42 : 24
               const volHeight = (candle.volume / maxVol) * barHeight
               const isHovered = hoveredCandle === i
               
@@ -864,7 +734,7 @@ function CandlestickChart({ ticker, compact = false, expanded = false }) {
                 <rect
                   key={i}
                   x={x}
-                  y={barHeight + 5 - volHeight}
+                  y={barHeight + 3 - volHeight}
                   width={candleWidth}
                   height={volHeight}
                   fill={candle.bullish ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'}

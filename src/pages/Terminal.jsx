@@ -475,11 +475,11 @@ async function getSampleHarvestedData(ticker, company) {
 // Fallback debate script
 function getFallbackDebateScript(ticker) {
   return [
-    { id: 1, speaker: 'bull', text: `Let's analyze ${ticker}. The company has shown solid fundamentals with consistent revenue growth and improving margins.`, start: 0, end: 8, duration_estimate: 8 },
-    { id: 2, speaker: 'bear', text: `While the numbers look decent, we need to consider the risks. Competition is intensifying and market conditions remain uncertain.`, start: 8, end: 16, duration_estimate: 8 },
-    { id: 3, speaker: 'bull', text: `That's fair, but management has a clear strategy and has been executing well. Their investments in innovation should pay off.`, start: 16, end: 24, duration_estimate: 8 },
-    { id: 4, speaker: 'bear', text: `Valuation is stretched at current levels. The market may have already priced in the optimistic scenario.`, start: 24, end: 32, duration_estimate: 8 },
-    { id: 5, speaker: 'bull', text: `I disagree on valuation. When you factor in growth potential and market opportunity, the stock looks reasonably priced.`, start: 32, end: 40, duration_estimate: 8 },
-    { id: 6, speaker: 'bear', text: `We'll have to agree to disagree. I'd wait for a better entry point before building a position.`, start: 40, end: 48, duration_estimate: 8 },
+    { id: 1, speaker: 'bull', text: `So ${ticker} right? Been looking at the numbers. Actually pretty solid if you ask me.`, start: 0, end: 7, duration_estimate: 7 },
+    { id: 2, speaker: 'bear', text: `I don't know. Competition's getting crazy and the economy's... you know. It's rough out there.`, start: 7, end: 15, duration_estimate: 8 },
+    { id: 3, speaker: 'bull', text: `Yeah but the team running this? They know what they're doing. You can tell. They're actually executing.`, start: 15, end: 23, duration_estimate: 8 },
+    { id: 4, speaker: 'bear', text: `Maybe. But the price though? Seems expensive to me. How much higher can it really go?`, start: 23, end: 31, duration_estimate: 8 },
+    { id: 5, speaker: 'bull', text: `Think long term. Five years out? This price is gonna look cheap. Trust me on this one.`, start: 31, end: 39, duration_estimate: 8 },
+    { id: 6, speaker: 'bear', text: `We'll see. I'm waiting for a dip. No rush. Better safe than sorry, right?`, start: 39, end: 46, duration_estimate: 7 },
   ]
 }
