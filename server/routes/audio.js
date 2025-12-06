@@ -10,21 +10,81 @@ const VOICES = {
   bear: 'EXAVITQu4vr4xnSDxMaL'   // Sarah - soft American female, smooth and warm
 };
 
-// Voice settings for smooth natural flow
+/**
+ * Humanized Voice Settings
+ * 
+ * Key insight: Lower stability = more human-like fluctuations and emotion
+ * Standard AI voices use ~0.7 stability which sounds robotic
+ * We use 0.35 to force natural voice fluctuations
+ * 
+ * Acoustic goal: Generate speech with audible breaths, subtle mouth clicks,
+ * varying pacing. Avoid 'News Anchor' prosody. Conversational and candid tone,
+ * as if recorded in a room, not a sterile studio.
+ */
 const VOICE_SETTINGS = {
   bull: {
-    stability: 0.65,           // Smooth and consistent
-    similarity_boost: 0.8,    
-    style: 0.3,                // Natural, not dramatic
-    use_speaker_boost: false   // Softer without boost
+    stability: 0.35,            // LOW - forces voice to fluctuate, adds emotion/imperfections
+    similarity_boost: 0.75,     // Keep voice recognizable but allow variation
+    style: 0.85,                // HIGH style exaggeration for expressiveness
+    use_speaker_boost: true     // Enhanced presence
   },
   bear: {
-    stability: 0.6,
-    similarity_boost: 0.75,
-    style: 0.35,
-    use_speaker_boost: false
+    stability: 0.35,            // LOW - more human-like, less robotic
+    similarity_boost: 0.75,     // Balanced similarity
+    style: 0.9,                 // HIGH style for dramatic skeptical tone
+    use_speaker_boost: true     // Enhanced presence
   }
 };
+
+/**
+ * TODO: Implement real cloud storage for audio files
+ * 
+ * Options to implement:
+ * 1. AWS S3 - Most common, requires aws-sdk
+ *    - npm install @aws-sdk/client-s3
+ *    - Set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, S3_BUCKET
+ * 
+ * 2. Cloudflare R2 - S3-compatible, cheaper egress
+ *    - npm install @aws-sdk/client-s3 (S3-compatible API)
+ *    - Set R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ENDPOINT, R2_BUCKET
+ * 
+ * 3. Google Cloud Storage
+ *    - npm install @google-cloud/storage
+ *    - Set GOOGLE_APPLICATION_CREDENTIALS
+ * 
+ * 4. Convex File Storage (recommended for this stack)
+ *    - Use ctx.storage.store() in a Convex action
+ *    - Returns a storage ID that can be converted to URL
+ * 
+ * Implementation steps:
+ * 1. Concatenate audio buffers into single MP3 file
+ * 2. Upload to storage provider
+ * 3. Return public URL
+ * 4. Store URL in Convex database
+ */
+
+/**
+ * Concatenate audio buffers into a single file
+ * Note: For proper MP3 concatenation, you may need ffmpeg or similar
+ * Simple buffer concatenation works for basic cases
+ */
+function concatenateAudioBuffers(audioSegments) {
+  if (audioSegments.length === 0) return null;
+  
+  // Calculate total size
+  const totalSize = audioSegments.reduce((sum, seg) => sum + seg.buffer.length, 0);
+  
+  // Create combined buffer
+  const combined = Buffer.alloc(totalSize);
+  let offset = 0;
+  
+  for (const segment of audioSegments) {
+    segment.buffer.copy(combined, offset);
+    offset += segment.buffer.length;
+  }
+  
+  return combined;
+} 
 
 /**
  * POST /api/audio/synthesize
@@ -44,7 +104,8 @@ router.post('/synthesize', async (req, res, next) => {
     if (!process.env.ELEVENLABS_API_KEY) {
       return res.status(500).json({
         error: 'ElevenLabs API key not configured',
-        code: 'CONFIG_ERROR'
+        code: 'CONFIG_ERROR',
+        message: 'Set ELEVENLABS_API_KEY in your .env file'
       });
     }
 
@@ -64,11 +125,13 @@ router.post('/synthesize', async (req, res, next) => {
 
     const audioSegments = [];
     let totalDuration = 0;
+    let successCount = 0;
 
     // Process each line
     for (const line of debateScript) {
-      const voiceId = line.speaker === 'bull' ? VOICES.bull : VOICES.bear;
-      const settings = line.speaker === 'bull' ? VOICE_SETTINGS.bull : VOICE_SETTINGS.bear;
+      const speaker = (line.speaker || '').toLowerCase();
+      const voiceId = speaker === 'bull' || speaker === 'BULL' ? VOICES.bull : VOICES.bear;
+      const settings = speaker === 'bull' || speaker === 'BULL' ? VOICE_SETTINGS.bull : VOICE_SETTINGS.bear;
       
       try {
         const response = await fetch(
@@ -82,7 +145,7 @@ router.post('/synthesize', async (req, res, next) => {
             },
             body: JSON.stringify({
               text: line.text,
-              model_id: 'eleven_turbo_v2_5',  // Most natural sounding
+              model_id: 'eleven_multilingual_v2',
               voice_settings: settings
             })
           }
@@ -99,12 +162,13 @@ router.post('/synthesize', async (req, res, next) => {
           id: line.id,
           speaker: line.speaker,
           buffer: Buffer.from(audioBuffer),
-          duration: line.duration_estimate
+          duration: line.duration_estimate || 5
         });
         
-        totalDuration += line.duration_estimate;
+        totalDuration += line.duration_estimate || 5;
+        successCount++;
         
-        console.log(`[Audio] Generated line ${line.id}/${debateScript.length}`);
+        console.log(`[Audio] Generated line ${successCount}/${debateScript.length}`);
 
       } catch (lineError) {
         console.error(`[Audio] Error on line ${line.id}:`, lineError.message);
@@ -114,29 +178,53 @@ router.post('/synthesize', async (req, res, next) => {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    // For now, return metadata about generated audio
-    // In production, you would:
-    // 1. Concatenate audio buffers
-    // 2. Upload to cloud storage (S3, Cloudflare R2, etc.)
-    // 3. Return the URL
+    // Check if we generated any audio
+    if (audioSegments.length === 0) {
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to generate any audio segments',
+        code: 'SYNTHESIS_FAILED'
+      });
+    }
 
-    // Placeholder URL (in production this would be actual storage URL)
-    const audioUrl = sessionId 
-      ? `https://storage.example.com/audio/${sessionId}.mp3`
-      : null;
+    // Concatenate audio buffers
+    const combinedAudio = concatenateAudioBuffers(audioSegments);
+    
+    /**
+     * TODO: Upload to cloud storage and get real URL
+     * 
+     * Example with S3:
+     * const s3Client = new S3Client({ region: process.env.AWS_REGION });
+     * const key = `audio/${sessionId || Date.now()}.mp3`;
+     * await s3Client.send(new PutObjectCommand({
+     *   Bucket: process.env.S3_BUCKET,
+     *   Key: key,
+     *   Body: combinedAudio,
+     *   ContentType: 'audio/mpeg',
+     *   ACL: 'public-read'
+     * }));
+     * const audioUrl = `https://${process.env.S3_BUCKET}.s3.amazonaws.com/${key}`;
+     */
+    
+    // For now, audio URL is null until storage is implemented
+    // The audio data is generated but not persisted
+    const audioUrl = null;
+    const audioGenerated = combinedAudio !== null;
 
-    // Save to Convex if sessionId provided
-    if (sessionId && convex && audioUrl) {
+    // Save to Convex if sessionId provided (even without URL, save the duration)
+    if (sessionId && convex) {
       try {
-        await convex.mutation(api.analyses.storeAudio, {
-          sessionId,
-          audioUrl,
-          audioDuration: totalDuration
-        });
-        console.log(`[Audio] Saved to Convex session: ${sessionId}`);
+        // Only save if we have a real URL
+        // When storage is implemented, uncomment this:
+        // await convex.mutation(api.analyses.storeAudio, {
+        //   sessionId,
+        //   audioUrl,
+        //   audioDuration: totalDuration
+        // });
+        console.log(`[Audio] Generated ${successCount} segments for session: ${sessionId}`);
+        console.log('[Audio] NOTE: Cloud storage not configured - audio not persisted');
       } catch (convexError) {
         console.error('[Audio] Failed to save to Convex:', convexError);
-        // Continue - don't fail the request
       }
     }
 
@@ -145,9 +233,13 @@ router.post('/synthesize', async (req, res, next) => {
       segments: audioSegments.length,
       totalSegments: debateScript.length,
       estimatedDuration: totalDuration,
-      message: 'Audio segments generated. Upload to storage for URL.',
-      // In production, this would be the actual audio URL
-      audioUrl
+      audioGenerated,
+      audioUrl, // Will be null until storage is implemented
+      message: audioUrl 
+        ? 'Audio generated and uploaded successfully'
+        : 'Audio generated but storage not configured. Implement cloud storage to persist audio.',
+      // TODO: Remove this note when storage is implemented
+      _storageNote: 'Configure S3, R2, or Convex storage to persist audio files'
     });
 
   } catch (error) {
@@ -182,8 +274,9 @@ router.post('/synthesize-line', async (req, res, next) => {
       });
     }
 
-    const voiceId = speaker === 'bull' ? VOICES.bull : VOICES.bear;
-    const settings = speaker === 'bull' ? VOICE_SETTINGS.bull : VOICE_SETTINGS.bear;
+    const speakerLower = speaker.toLowerCase();
+    const voiceId = speakerLower === 'bull' ? VOICES.bull : VOICES.bear;
+    const settings = speakerLower === 'bull' ? VOICE_SETTINGS.bull : VOICE_SETTINGS.bear;
 
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
@@ -196,7 +289,7 @@ router.post('/synthesize-line', async (req, res, next) => {
         },
         body: JSON.stringify({
           text,
-          model_id: 'eleven_turbo_v2_5',  // Fastest & most natural sounding
+          model_id: 'eleven_multilingual_v2',
           voice_settings: settings
         })
       }
@@ -235,7 +328,7 @@ router.get('/voices', async (req, res, next) => {
       return res.json({
         configured: false,
         voices: VOICES,
-        message: 'Using default voice IDs'
+        message: 'Using default voice IDs - set ELEVENLABS_API_KEY to enable'
       });
     }
 
@@ -272,5 +365,3 @@ router.get('/voices', async (req, res, next) => {
 });
 
 export default router;
-
-

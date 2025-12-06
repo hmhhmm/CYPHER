@@ -340,21 +340,35 @@ input:focus {
 }
 
 /* =============================================
-   TRADINGVIEW WIDGET FIX
+   TRADINGVIEW WIDGET STYLES
    ============================================= */
 
 .tradingview-widget-container {
-  overflow: hidden !important;
+  height: 100% !important;
+  width: 100% !important;
+}
+
+.tradingview-widget-container__widget {
+  height: 100% !important;
+  width: 100% !important;
 }
 
 .tradingview-widget-container iframe {
   height: 100% !important;
   width: 100% !important;
+  border: none !important;
 }
 
-/* Hide TradingView copyright that causes overflow */
+/* Style the TradingView copyright link */
 .tradingview-widget-copyright {
-  display: none !important;
+  font-size: 11px !important;
+  padding: 4px 8px !important;
+  background: rgba(10, 10, 15, 0.8) !important;
+}
+
+.tradingview-widget-copyright a {
+  color: #8A2BE2 !important;
+  text-decoration: none !important;
 }
 
 /* =============================================

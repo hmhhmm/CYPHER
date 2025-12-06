@@ -4,6 +4,12 @@ import dotenv from 'dotenv';
 import multer from 'multer';
 import Anthropic from '@anthropic-ai/sdk';
 import { ConvexHttpClient } from 'convex/browser';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+// Get current directory for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Route imports
 import transcribeRoutes from './routes/transcribe.js';
@@ -12,10 +18,15 @@ import pdfRoutes from './routes/pdf.js';
 import debateRoutes from './routes/debate.js';
 import audioRoutes from './routes/audio.js';
 import newsRoutes from './routes/news.js';
+import pipelineRoutes from './routes/pipeline.js';
 import analysisRoutes from './routes/analysis.js';
+import broadcastRoutes from './routes/broadcast.js';
 
-// Load environment variables
-dotenv.config();
+// Load environment variables from multiple possible locations
+// Try server/.env first, then root .env
+dotenv.config({ path: join(__dirname, '.env') });
+dotenv.config({ path: join(__dirname, '..', '.env') });
+dotenv.config(); // Also try current working directory
 
 // Initialize Convex client
 const convexUrl = process.env.CONVEX_URL;
@@ -318,6 +329,8 @@ app.use('/api/debate', debateRoutes);
 app.use('/api/analysis', analysisRoutes);
 app.use('/api/audio', audioRoutes);
 app.use('/api/news', newsRoutes);
+app.use('/api/pipeline', pipelineRoutes);
+app.use('/api/broadcast', broadcastRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -371,13 +384,13 @@ if (process.env.VERCEL !== '1') {
 ║   Convex:  ${convex ? '🟢 Connected' : '⚠️  Not configured'}              ║
 ║                                                   ║
 ╚═══════════════════════════════════════════════════╝
-    `);
-    
-    if (!process.env.ANTHROPIC_API_KEY) {
-      console.warn('⚠️  Warning: ANTHROPIC_API_KEY not set in environment');
-      console.warn('   Create a .env file with: ANTHROPIC_API_KEY=your_key_here');
-    }
-  });
+  `);
+  
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.warn('⚠️  Warning: ANTHROPIC_API_KEY not set in environment');
+    console.warn('   Create a .env file with: ANTHROPIC_API_KEY=your_key_here');
+  }
+});
 }
 
 export default app;

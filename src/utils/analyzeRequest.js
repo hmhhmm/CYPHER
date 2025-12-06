@@ -1,6 +1,10 @@
 import { extractIntent } from './api.js';
 
-// Stock ticker mapping for common companies (fallback)
+/**
+ * Stock ticker mapping for common companies
+ * Used as offline fallback when backend API is unavailable
+ * This is NOT mock data - it's a valid local lookup table for ticker resolution
+ */
 const tickerMap = {
   // Tech Giants
   'tesla': { ticker: 'TSLA', company: 'Tesla Inc.' },
@@ -71,7 +75,7 @@ const tickerMap = {
  * @returns {Promise<{ticker: string, company: string}>}
  */
 export async function analyzeRequest(input) {
-  // Try backend API first
+  // Try backend API first (preferred - uses AI for better extraction)
   try {
     const intent = await extractIntent(input);
     
@@ -81,48 +85,53 @@ export async function analyzeRequest(input) {
         company: intent.company,
         year: intent.year,
         confidence: intent.confidence,
+        sessionId: intent.sessionId,
       };
     }
     
-    // If backend returned suggestions, we might need clarification
+    // If backend returned clarification needed, propagate it
     if (intent.status === 'clarification_needed') {
-      // For now, try local fallback
-      console.log('Intent needs clarification, trying local fallback');
+      return {
+        status: 'clarification_needed',
+        message: intent.message,
+        suggestions: intent.suggestions,
+      };
     }
   } catch (error) {
     console.warn('Backend API unavailable, using local fallback:', error.message);
   }
   
-  // Fallback to local mapping
-  const lowerInput = input.toLowerCase()
+  // Fallback to local mapping (offline support)
+  const lowerInput = input.toLowerCase();
+  const trimmed = input.trim();
   
   // First check for explicit ticker symbols (e.g., $TSLA, TSLA)
-  const tickerMatch = input.match(/\$?([A-Z]{1,5})\b/i)
+  const tickerMatch = input.match(/\$?([A-Z]{1,5})\b/i);
   if (tickerMatch) {
-    const potentialTicker = tickerMatch[1].toLowerCase()
+    const potentialTicker = tickerMatch[1].toLowerCase();
     if (tickerMap[potentialTicker]) {
-      return tickerMap[potentialTicker]
+      return tickerMap[potentialTicker];
     }
-    // Fallback: if we don't recognize the ticker, still return it uppercased
-    return { ticker: potentialTicker.toUpperCase(), company: potentialTicker.toUpperCase() }
+    // If we don't recognize the ticker, still return it uppercased
+    return { ticker: potentialTicker.toUpperCase(), company: potentialTicker.toUpperCase() };
   }
   
-  // 2) Company name match
+  // Company name match
   for (const [key, value] of Object.entries(tickerMap)) {
     if (lowerInput.includes(key)) {
-      return value
+      return value;
     }
   }
   
-  // 3) Fallback: attempt to sanitize the first token as ticker
-  const firstToken = trimmed.split(/\s+/)[0] || ''
-  const sanitized = firstToken.replace(/[^A-Za-z0-9\.\-]/g, '')
+  // Attempt to sanitize the first token as ticker
+  const firstToken = trimmed.split(/\s+/)[0] || '';
+  const sanitized = firstToken.replace(/[^A-Za-z0-9.\-]/g, '');
   if (sanitized.length >= 1 && sanitized.length <= 7) {
-    return { ticker: sanitized.toUpperCase(), company: sanitized.toUpperCase() }
+    return { ticker: sanitized.toUpperCase(), company: sanitized.toUpperCase() };
   }
 
   // If no match found, throw error
-  throw new Error('Could not identify stock ticker from input')
+  throw new Error('Could not identify stock ticker from input');
 }
 
 /**

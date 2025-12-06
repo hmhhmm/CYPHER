@@ -2,14 +2,10 @@ import { useState, useCallback, useEffect } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { runAnalysisPipeline, healthCheck } from '../utils/api.js';
-import { 
-  getSourceDocuments, 
-  getKeyInsights, 
-  getTranscript 
-} from '../utils/analyzeRequest.js';
 
 /**
  * Custom hook for managing analysis pipeline
+ * All data comes from real API calls - no mock data
  */
 export function useAnalysis() {
   const [status, setStatus] = useState('idle');
@@ -24,10 +20,10 @@ export function useAnalysis() {
       try {
         await healthCheck();
         setBackendAvailable(true);
-        console.log('Backend API is available');
+        console.log('[useAnalysis] Backend API is available');
       } catch (err) {
         setBackendAvailable(false);
-        console.log('Backend API not available, running in demo mode');
+        console.warn('[useAnalysis] Backend API not available:', err.message);
       }
     }
     checkBackend();
@@ -82,12 +78,14 @@ export function useAnalysis() {
     isProcessing: status === 'processing',
     isComplete: status === 'complete',
     needsClarification: status === 'clarification_needed',
+    hasError: status === 'error',
   };
 }
 
 /**
  * Custom hook for loading analysis data (for Dashboard)
  * This hook loads the latest analysis from Convex for a given ticker
+ * Returns real data only - no mock fallbacks
  */
 export function useAnalysisData(ticker) {
   const [loading, setLoading] = useState(true);
@@ -105,12 +103,18 @@ export function useAnalysisData(ticker) {
     }
   }, [convexAnalysis]);
 
-  // If we have real data from Convex, use it
-  if (convexAnalysis && convexAnalysis.status === 'complete') {
+  // If we have real data from Convex, use it.
+  // Treat analyses that reached the report stage as "complete enough"
+  // even if audio synthesis failed (status may stay at 'synthesizing_audio'
+  // or 'generating_report').
+  if (
+    convexAnalysis &&
+    ['complete', 'synthesizing_audio', 'generating_report'].includes(convexAnalysis.status)
+  ) {
     return {
       data: {
         // Map Convex data to frontend format
-        // Use sourceDocuments from Apify if available (includes both PDFs and news), limit to 5-6 documents
+        // Use sourceDocuments from Apify if available (includes both PDFs and news)
         documents: convexAnalysis.sourceDocuments && convexAnalysis.sourceDocuments.length > 0
           ? (() => {
               // First, deduplicate by URL (keep first occurrence)
@@ -168,8 +172,9 @@ export function useAnalysisData(ticker) {
                 date: new Date(convexAnalysis.createdAt).toLocaleDateString(),
                 relevance: 95
               }]
-            : getSourceDocuments(ticker),
+            : [], // No mock data - return empty array
         
+        // Generate insights from real harvested data
         insights: convexAnalysis.harvestedData?.content
           ? [
               {
@@ -188,9 +193,10 @@ export function useAnalysisData(ticker) {
                 impact: "medium"
               }
             ]
-          : getKeyInsights(ticker),
+          : [], // No mock data - return empty array
         
-        transcript: convexAnalysis.debateScript || getTranscript(ticker),
+        // Use real debate script from Convex
+        transcript: convexAnalysis.debateScript || [],
         harvestedData: convexAnalysis.harvestedData,
         debateScript: convexAnalysis.debateScript,
         analysisReport: convexAnalysis.analysisReport,
@@ -198,28 +204,61 @@ export function useAnalysisData(ticker) {
         sessionId: convexAnalysis.sessionId,
         ticker: convexAnalysis.ticker,
         company: convexAnalysis.company,
+        status: convexAnalysis.status,
+        createdAt: convexAnalysis.createdAt,
       },
       loading: false,
+      hasData: true,
     };
   }
 
-  // Fallback to mock data while loading or if no Convex data exists
+  // No data found in Convex - return empty state (not mock data)
   if (!loading && !convexAnalysis) {
     return {
       data: {
-        documents: getSourceDocuments(ticker),
-        insights: getKeyInsights(ticker),
-        transcript: getTranscript(ticker),
+        documents: [],
+        insights: [],
+        transcript: [],
         harvestedData: null,
         debateScript: null,
         audioUrl: null,
+        ticker: ticker?.toUpperCase(),
+        company: null,
       },
       loading: false,
+      hasData: false,
+      message: `No analysis found for ${ticker}. Run a new analysis to generate data.`,
+    };
+  }
+
+  // Analysis exists but is not complete (in progress or error)
+  if (!loading && convexAnalysis && convexAnalysis.status !== 'complete') {
+    return {
+      data: {
+        documents: convexAnalysis.sourceDocuments || [],
+        insights: [],
+        transcript: [],
+        harvestedData: convexAnalysis.harvestedData || null,
+        debateScript: convexAnalysis.debateScript || null,
+        audioUrl: convexAnalysis.audioUrl || null,
+        ticker: convexAnalysis.ticker,
+        company: convexAnalysis.company,
+        status: convexAnalysis.status,
+        errorMessage: convexAnalysis.errorMessage,
+      },
+      loading: false,
+      hasData: true,
+      isIncomplete: true,
+      status: convexAnalysis.status,
     };
   }
 
   // Still loading
-  return { data: null, loading: true };
+  return { 
+    data: null, 
+    loading: true,
+    hasData: false,
+  };
 }
 
 /**
@@ -244,5 +283,3 @@ export default {
   PIPELINE_STEPS,
   getStepIndex,
 };
-
-

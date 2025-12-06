@@ -1,0 +1,80 @@
+# Core Framework
+react==18.3.1
+react-dom==18.3.1
+react-router-dom==6.30.2
+
+# AI/ML Services
+@anthropic-ai/sdk==0.32.1
+
+# Backend Framework
+express==4.21.2
+cors==2.8.5
+dotenv==16.4.5
+
+# Database
+convex==1.13.0
+
+# UI Libraries
+framer-motion==11.0.0
+lucide-react==0.400.0
+react-ts-tradingview-widgets==1.2.8
+
+# ============================================
+# ROOT DEV DEPENDENCIES
+# ============================================
+
+# Build Tools
+vite==5.3.0
+@vitejs/plugin-react==4.3.1
+
+# TypeScript Types
+@types/react==18.3.3
+@types/react-dom==18.3.0
+
+# Styling
+tailwindcss==3.4.4
+postcss==8.4.38
+autoprefixer==10.4.19
+
+# Development Tools
+concurrently==9.1.0
+eslint==9.0.0
+
+# ============================================
+# SERVER PACKAGE DEPENDENCIES
+# ============================================
+
+# AI Services
+@anthropic-ai/sdk==0.24.0
+assemblyai==4.4.0
+
+# Backend Framework
+express==4.19.2
+cors==2.8.5
+dotenv==16.4.5
+
+# File Processing
+multer==1.4.5-lts.1
+pdf-parse==1.1.1
+
+# Database
+convex==1.13.0
+
+# ============================================
+# INSTALLATION INSTRUCTIONS
+# ============================================
+# 1. Install root dependencies:
+#    npm install
+#
+# 2. Install server dependencies:
+#    cd server
+#    npm install
+#
+# 3. Create .env file in server/ directory
+#
+# 4. Run development servers:
+#    npm run dev:all (runs both frontend and backend)
+#    OR
+#    npm run dev (frontend only)
+#    npm run dev:server (backend only)
+

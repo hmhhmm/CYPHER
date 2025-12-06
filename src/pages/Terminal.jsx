@@ -139,24 +139,33 @@ export default function Terminal() {
         }
       )
 
-      // Navigate to dashboard with result
+      // Navigate to dashboard with result - pass analysisData in state
       await delay(800)
-      if (result && result.sessionId) {
-        navigate(`/dashboard/${ticker}?company=${encodeURIComponent(company)}&sessionId=${result.sessionId}`)
-      } else {
-        navigate(`/dashboard/${ticker}?company=${encodeURIComponent(company)}`)
-      }
+      navigate(`/dashboard/${ticker}?company=${encodeURIComponent(company)}`, {
+        state: { 
+          analysisData: result,
+          ticker,
+          company,
+        }
+      })
 
     } catch (err) {
       console.error('Pipeline error:', err)
       setError(err.message)
       addLine(`> [ERROR] ${err.message}`, 'red')
-      addLine(`> Retrying with fallback data for ${ticker}...`, 'yellow')
+      addLine(`> Analysis failed. Navigating to dashboard...`, 'yellow')
       setProgress(100)
       
-      // Navigate to dashboard anyway (it will use fallback data)
+      // Navigate to dashboard with error state
       setTimeout(() => {
-        navigate(`/dashboard/${ticker}?company=${encodeURIComponent(company)}`)
+        navigate(`/dashboard/${ticker}?company=${encodeURIComponent(company)}`, {
+          state: { 
+            analysisData: null,
+            ticker,
+            company,
+            error: err.message,
+          }
+        })
       }, 2000)
     }
   }, [ticker, company, addLine, navigate])
@@ -286,7 +295,7 @@ export default function Terminal() {
                 <div className="flex items-center gap-2">
                   <Activity size={14} className="text-purple-400 animate-pulse" />
                   <span className="text-xs text-purple-400">
-                    {isComplete ? 'COMPLETE' : 'PROCESSING'}
+                    {isComplete ? 'COMPLETE' : error ? 'ERROR' : 'PROCESSING'}
                   </span>
                 </div>
               </div>
@@ -360,7 +369,10 @@ export default function Terminal() {
                 >
                   <div className="flex items-center gap-3">
                     <AlertCircle size={20} className="text-red-400" />
-                    <span className="text-red-400 font-semibold">Error occurred, using fallback...</span>
+                    <div>
+                      <span className="text-red-400 font-semibold">Analysis Error</span>
+                      <p className="text-red-400/70 text-xs mt-1">{error}</p>
+                    </div>
                   </div>
                 </motion.div>
               )}
@@ -370,7 +382,7 @@ export default function Terminal() {
             <div className="px-6 pb-4 space-y-3">
               <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
                 <motion.div 
-                  className="h-full bg-gradient-to-r from-purple-600 via-violet-500 to-purple-600 rounded-full"
+                  className={`h-full rounded-full ${error ? 'bg-red-500' : 'bg-gradient-to-r from-purple-600 via-violet-500 to-purple-600'}`}
                   initial={{ width: 0 }}
                   animate={{ width: `${progress}%` }}
                   transition={{ duration: 0.5 }}

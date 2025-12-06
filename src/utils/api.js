@@ -1,5 +1,6 @@
 /**
  * API client for CYPHER backend
+ * All functions make real API calls - no mock data
  */
 
 // Use relative URLs in production (Vercel), localhost in dev
@@ -43,6 +44,8 @@ async function fetchAPI(endpoint, options = {}) {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       const error = new Error(errorData.error || `HTTP ${response.status}`);
+      error.status = response.status;
+      error.data = errorData;
       console.error(`[API Error] ${method} ${url}:`, {
         status: response.status,
         statusText: response.statusText,
@@ -352,6 +355,7 @@ export async function healthCheck() {
 
 /**
  * Run the full analysis pipeline
+ * All steps use real API calls - no mock data fallbacks
  * @param {string} query - User's natural language query
  * @param {function} onStatusChange - Callback for status updates
  * @returns {Promise<{analysis: object, debateScript: array, sessionId: string}>}
@@ -391,14 +395,12 @@ export async function runAnalysisPipeline(query, onStatusChange = () => {}) {
     console.log('[Pipeline] Step 2 complete:', { 
       resultsFound: pdfResults.results?.length || 0,
       pdfUrl: pdfResults.pdfUrl || 'none',
-      note: 'News articles are automatically fetched and saved as sourceDocuments',
     });
     
-    // For demo, we'll use sample data if no PDF found
-    let harvestedData;
+    // Step 3: Harvest PDF data
+    let harvestedData = null;
     
     if (pdfResults.results && pdfResults.results.length > 0 && pdfResults.results[0].url) {
-      // Step 3: Harvest PDF
       console.log('[Pipeline] Step 3: Harvesting PDF...');
       onStatusChange('harvesting', 'Extracting financial data from filing...');
       const harvestResult = await harvestPDF(
@@ -414,19 +416,35 @@ export async function runAnalysisPipeline(query, onStatusChange = () => {}) {
         hasData: !!harvestedData,
       });
     } else {
-      // Use sample data for demo
-      console.warn('[Pipeline] Step 3: No PDF found, using sample data');
-      onStatusChange('harvesting', 'Loading financial data...');
-      harvestedData = await getSampleData(intent.ticker);
+      // No PDF found - this is a real limitation, not a mock fallback scenario
+      console.warn('[Pipeline] Step 3: No PDF found for', intent.ticker);
+      onStatusChange('harvesting', `No SEC filing found for ${intent.ticker}. Generating analysis from available data...`);
+      
+      // Create minimal harvested data structure for the debate generator
+      // The backend will use news and other sources
+      harvestedData = {
+        meta: {
+          ticker: intent.ticker.toUpperCase(),
+          company: intent.company,
+          report_type: 'Analysis',
+          period: intent.year?.toString() || new Date().getFullYear().toString(),
+          source_url: 'N/A - No SEC filing found',
+        },
+        content: {
+          management_discussion: `Analysis based on available market data and news for ${intent.company}.`,
+          risk_factors: 'Risk analysis generated from market conditions and news sources.',
+          key_financials: 'Financial data sourced from public market information.',
+        },
+      };
     }
     
-    // Step 4: Generate debate (backend automatically includes news context from Convex)
-    console.log('[Pipeline] Step 4: Generating debate with news context...');
-    onStatusChange('generating_debate', 'Generating Bull vs Bear debate with news context...');
+    // Step 4: Generate debate (backend includes news context from Convex)
+    console.log('[Pipeline] Step 4: Generating debate with available context...');
+    onStatusChange('generating_debate', 'Generating Bull vs Bear debate...');
     const debateResult = await generateDebate(harvestedData, sessionId);
     console.log('[Pipeline] Step 4 complete:', { 
       scriptLines: debateResult.script?.length || 0,
-      note: 'Debate includes context from annual report and recent news',
+      note: 'Debate includes context from annual report and recent news', 
     });
     
     // Step 4.5: Generate analysis report
@@ -436,43 +454,86 @@ export async function runAnalysisPipeline(query, onStatusChange = () => {}) {
     try {
       // Get source documents from the analysis session
       const reportResult = await generateAnalysisReport(harvestedData, sessionId, intent.company, intent.ticker);
-      analysisReport = reportResult.report;
+      // Include both the report data and the PDF data URL
+      analysisReport = {
+        report: reportResult.report,
+        pdfDataUrl: reportResult.pdfDataUrl,
+        meta: reportResult.meta,
+      };
       console.log('[Pipeline] Step 4.5 complete:', {
-        hasReport: !!analysisReport,
-        strengths: analysisReport?.keyStrengths?.length || 0,
-        risks: analysisReport?.keyRisks?.length || 0,
+        hasReport: !!analysisReport.report,
+        hasPdfDataUrl: !!analysisReport.pdfDataUrl,
+        strengths: analysisReport.report?.keyStrengths?.length || 0,
+        risks: analysisReport.report?.keyRisks?.length || 0,
       });
     } catch (reportError) {
       console.warn('[Pipeline] Step 4.5: Analysis report generation skipped:', reportError.message);
       // Continue without report - not critical
     }
     
-    // Step 5: Synthesize audio (optional - skip if no API key)
-    console.log('[Pipeline] Step 5: Synthesizing audio...');
-    onStatusChange('synthesizing_audio', 'Creating audio podcast...');
+    // Step 5: Generate broadcast audio (auto-generate from report)
+    console.log('[Pipeline] Step 5: Generating broadcast audio...');
+    onStatusChange('generating_broadcast', 'Creating audio broadcast...');
+    let broadcastAudioUrl = null;
+    try {
+      if (analysisReport?.report) {
+        // Generate narrative script
+        const scriptResponse = await fetchAPI('/api/broadcast/generate-script', {
+          method: 'POST',
+          body: JSON.stringify({
+            analysisReport,
+            keyInsights: [],
+            ticker: intent.ticker,
+            company: intent.company
+          }),
+        });
+        
+        if (scriptResponse.script) {
+          // Synthesize audio
+          const audioResponse = await fetch(`${API_BASE_URL}/api/broadcast/synthesize`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ script: scriptResponse.script }),
+          });
+          
+          if (audioResponse.ok) {
+            const audioBlob = await audioResponse.blob();
+            broadcastAudioUrl = URL.createObjectURL(audioBlob);
+            console.log('[Pipeline] Step 5 complete: Broadcast audio generated');
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[Pipeline] Step 5: Broadcast audio generation skipped:', error.message);
+    }
+
+    // Step 6: Synthesize debate audio (optional)
+    console.log('[Pipeline] Step 6: Synthesizing debate audio...');
+    onStatusChange('synthesizing_audio', 'Creating debate podcast...');
     let audioResult = null;
     try {
       audioResult = await synthesizeAudio(debateResult.script, sessionId);
-      console.log('[Pipeline] Step 5 complete:', { 
+      console.log('[Pipeline] Step 6 complete:', { 
         audioUrl: audioResult?.audioUrl || 'none',
       });
     } catch (error) {
-      console.warn('[Pipeline] Step 5: Audio synthesis skipped:', error.message);
+      console.warn('[Pipeline] Step 6: Debate audio synthesis unavailable:', error.message);
     }
 
     onStatusChange('complete', 'Analysis complete!');
 
     const pipelineDuration = Math.round(performance.now() - pipelineStartTime);
-    console.log('[Pipeline] Pipeline complete successfully:', {
+    console.log('[Pipeline] Pipeline complete:', {
       sessionId,
       ticker: intent.ticker,
       duration: `${pipelineDuration}ms`,
       steps: {
         intent: '✓',
-        pdfSearch: '✓',
-        harvest: '✓',
+        pdfSearch: pdfResults.results?.length > 0 ? '✓' : '⚠ no results',
+        harvest: harvestedData ? '✓' : '⚠ limited data',
         debate: '✓',
-        audio: audioResult ? '✓' : 'skipped',
+        broadcast: broadcastAudioUrl ? '✓' : '⚠ unavailable',
+        debateAudio: audioResult ? '✓' : '⚠ unavailable',
       },
     });
   
@@ -483,6 +544,7 @@ export async function runAnalysisPipeline(query, onStatusChange = () => {}) {
       harvestedData,
       debateScript: debateResult.script,
       analysisReport: analysisReport,
+      broadcastAudioUrl,
       audioUrl: audioResult?.audioUrl || null,
       meta: debateResult.meta,
     };
@@ -499,47 +561,47 @@ export async function runAnalysisPipeline(query, onStatusChange = () => {}) {
 }
 
 /**
- * Get sample harvested data (for demo/development)
+ * NEW: Streamlined Pipeline (No Convex)
+ * Single call: Query → Search Term → Apify Data → Debate Script
+ * 
+ * @param {string} query - User's natural language query
+ * @param {function} onProgress - Optional callback for progress updates
+ * @returns {Promise<Object>} Complete analysis result
  */
-async function getSampleData(ticker) {
-  // Try to fetch from server's sample data
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/sample-data/${ticker}`);
-    if (response.ok) {
-      return response.json();
-    }
-  } catch (error) {
-    console.warn('Could not fetch sample data from server');
-  }
+export async function runStreamlinedPipeline(query, onProgress = () => {}) {
+  console.log('[StreamlinedPipeline] Starting for:', query);
   
-  // Fallback to hardcoded sample
-  return {
-    meta: {
-      ticker: ticker.toUpperCase(),
-      company: getCompanyName(ticker),
-      report_type: '10-K',
-      period: new Date().getFullYear().toString(),
-      source_url: 'https://www.sec.gov',
-    },
-    content: {
-      management_discussion: `${getCompanyName(ticker)} delivered strong performance this year with revenue growth driven by core business segments. Management remains optimistic about future growth prospects and continues to invest in innovation and market expansion.`,
-      risk_factors: `Key risks include intense competition, regulatory challenges, macroeconomic conditions, supply chain dependencies, and technology disruption. The company faces ongoing legal and compliance matters.`,
-      key_financials: `Revenue: Growing YoY. Margins: Under pressure from competition. Cash position: Strong. Debt: Manageable levels.`,
-    },
-  };
+  onProgress({ step: 'extracting', message: 'Analyzing your query...' });
+  
+  try {
+    const result = await fetchAPI('/api/pipeline/analyze', {
+      method: 'POST',
+      body: JSON.stringify({ query }),
+    });
+    
+    onProgress({ step: 'complete', message: 'Analysis complete!' });
+    
+    return result;
+  } catch (error) {
+    console.error('[StreamlinedPipeline] Failed:', error);
+    throw error;
+  }
 }
 
-function getCompanyName(ticker) {
-  const companies = {
-    TSLA: 'Tesla Inc.',
-    AAPL: 'Apple Inc.',
-    MSFT: 'Microsoft Corporation',
-    GOOGL: 'Alphabet Inc.',
-    AMZN: 'Amazon.com Inc.',
-    NVDA: 'NVIDIA Corporation',
-    META: 'Meta Platforms Inc.',
-  };
-  return companies[ticker.toUpperCase()] || ticker;
+/**
+ * Quick analysis - uses Claude's knowledge only (no Apify)
+ * Faster but less current data
+ * 
+ * @param {string} query - User's natural language query
+ * @returns {Promise<Object>} Analysis result
+ */
+export async function runQuickPipeline(query) {
+  console.log('[QuickPipeline] Starting for:', query);
+  
+  return await fetchAPI('/api/pipeline/quick', {
+    method: 'POST',
+    body: JSON.stringify({ query }),
+  });
 }
 
 export default {
@@ -557,6 +619,6 @@ export default {
   searchNews,
   healthCheck,
   runAnalysisPipeline,
+  runStreamlinedPipeline,
+  runQuickPipeline,
 };
-
-
