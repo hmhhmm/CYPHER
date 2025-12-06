@@ -472,6 +472,15 @@ export default function PodcastPlayer({ ticker, transcript }) {
         ref={transcriptRef}
         className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin"
       >
+        {/* Empty state when no transcript */}
+        {(!transcript || transcript.length === 0) && (
+          <div className="flex flex-col items-center justify-center h-full text-center py-8">
+            <Mic size={32} className="text-gray-600 mb-4" />
+            <p className="text-gray-400 text-sm mb-2">No debate script loaded</p>
+            <p className="text-gray-600 text-xs">Run an analysis to generate a Bull vs Bear debate</p>
+          </div>
+        )}
+        
         {transcript.map((segment, index) => (
           <motion.div
             key={segment.id}

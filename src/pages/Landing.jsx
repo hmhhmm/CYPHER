@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
-import { runAnalysisPipeline } from '../utils/api'
+import { runStreamlinedPipeline, runQuickPipeline } from '../utils/api'
 import { 
   Mic, 
   MicOff, 
@@ -188,68 +188,99 @@ export default function Landing() {
         setLoadingStage('Initializing Analyst Swarm...')
         setMessages(prev => [...prev, { role: 'assistant', content: '⚡ Initializing Analyst Swarm...', isThinking: true }])
 
-        setLoadingStage('Connecting to data feeds...')
-        setMessages(prev => {
-          const filtered = prev.filter(m => !m.isThinking)
-          return [...filtered, { 
-            role: 'assistant', 
-            content: '📊 Connecting to SEC EDGAR, news feeds, and market data...', 
-            isThinking: true 
-          }]
-        })
-
-        setLoadingStage('Running full analysis pipeline...')
         let analysisData = null
         try {
-          // Use the full pipeline which includes Apify for PDF and news search
-          const pipelineResult = await runAnalysisPipeline(userMessage, (status, message) => {
-            setLoadingStage(message || status)
+          // Use the NEW streamlined pipeline (no Convex, direct API call)
+          const pipelineResult = await runStreamlinedPipeline(userMessage, (progress) => {
+            setLoadingStage(progress.message || progress.step)
             setMessages(prev => {
               const filtered = prev.filter(m => !m.isThinking)
               return [...filtered, { 
                 role: 'assistant', 
-                content: `🔄 ${message || status}...`, 
+                content: `🔄 ${progress.message || progress.step}...`, 
                 isThinking: true 
               }]
             })
           })
           
-          if (pipelineResult && !pipelineResult.needsClarification) {
+          if (pipelineResult && pipelineResult.success) {
+            // Transform streamlined result for Dashboard
             analysisData = {
-              ticker: pipelineResult.ticker || targetTicker,
-              company: pipelineResult.company || targetCompany,
-              harvestedData: pipelineResult.harvestedData,
-              debateScript: pipelineResult.debateScript,
-              audioUrl: pipelineResult.audioUrl,
+              ticker: pipelineResult.company.ticker,
+              company: pipelineResult.company.name,
+              year: pipelineResult.company.year,
+              sources: pipelineResult.sources,
+              analysis: pipelineResult.analysis,
+              debate: pipelineResult.debate,
+              meta: pipelineResult.meta,
             }
-          }
-        } catch (apiError) {
-          console.log('Pipeline error, using fallback:', apiError)
-          // Fallback to quick analysis if pipeline fails
-          try {
-            const response = await fetch('/api/analyze', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                ticker: targetTicker, 
-                company: targetCompany,
-                query: userMessage
-              })
+            
+            setMessages(prev => {
+              const filtered = prev.filter(m => !m.isThinking)
+              return [...filtered, { 
+                role: 'assistant', 
+                content: `✓ Target acquired: **${pipelineResult.company.name}** (${pipelineResult.company.ticker}). Generated ${pipelineResult.debate.lineCount} debate exchanges in ${(pipelineResult.meta.processingTime / 1000).toFixed(1)}s. Launching dashboard...` 
+              }]
             })
             
-            if (response.ok) {
-              analysisData = await response.json()
+            setTimeout(() => {
+              navigate(`/dashboard/${pipelineResult.company.ticker}`, { 
+                state: { 
+                  ticker: pipelineResult.company.ticker, 
+                  company: pipelineResult.company.name,
+                  analysisData 
+                } 
+              })
+            }, 1200)
+            return
+          }
+        } catch (apiError) {
+          console.log('Streamlined pipeline error, trying quick fallback:', apiError)
+          // Fallback to quick analysis if full pipeline fails
+          try {
+            const quickResult = await runQuickPipeline(userMessage)
+            
+            if (quickResult && quickResult.success) {
+              analysisData = {
+                ticker: quickResult.company.ticker,
+                company: quickResult.company.name,
+                year: quickResult.company.year,
+                sources: quickResult.sources,
+                analysis: quickResult.analysis,
+                debate: quickResult.debate,
+                meta: quickResult.meta,
+              }
+              
+              setMessages(prev => {
+                const filtered = prev.filter(m => !m.isThinking)
+                return [...filtered, { 
+                  role: 'assistant', 
+                  content: `✓ Quick analysis complete for **${quickResult.company.name}** (${quickResult.company.ticker}). Launching dashboard...` 
+                }]
+              })
+              
+              setTimeout(() => {
+                navigate(`/dashboard/${quickResult.company.ticker}`, { 
+                  state: { 
+                    ticker: quickResult.company.ticker, 
+                    company: quickResult.company.name,
+                    analysisData 
+                  } 
+                })
+              }, 1000)
+              return
             }
           } catch (fallbackError) {
-            console.log('Fallback API also failed')
+            console.log('Quick pipeline also failed:', fallbackError)
           }
         }
 
+        // If all pipelines failed, show error but still navigate
         setMessages(prev => {
           const filtered = prev.filter(m => !m.isThinking)
           return [...filtered, { 
             role: 'assistant', 
-            content: `✓ Target acquired: **${targetCompany}** (${targetTicker}). Analysis complete. Launching dashboard...` 
+            content: `⚠️ Analysis partially complete for **${targetCompany}** (${targetTicker}). Launching dashboard with available data...` 
           }]
         })
 

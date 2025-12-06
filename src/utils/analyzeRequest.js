@@ -1,6 +1,10 @@
 import { extractIntent } from './api.js';
 
-// Stock ticker mapping for common companies (fallback)
+/**
+ * Stock ticker mapping for common companies
+ * Used as offline fallback when backend API is unavailable
+ * This is NOT mock data - it's a valid local lookup table for ticker resolution
+ */
 const tickerMap = {
   // Tech Giants
   'tesla': { ticker: 'TSLA', company: 'Tesla Inc.' },
@@ -71,7 +75,7 @@ const tickerMap = {
  * @returns {Promise<{ticker: string, company: string}>}
  */
 export async function analyzeRequest(input) {
-  // Try backend API first
+  // Try backend API first (preferred - uses AI for better extraction)
   try {
     const intent = await extractIntent(input);
     
@@ -81,143 +85,78 @@ export async function analyzeRequest(input) {
         company: intent.company,
         year: intent.year,
         confidence: intent.confidence,
+        sessionId: intent.sessionId,
       };
     }
     
-    // If backend returned suggestions, we might need clarification
+    // If backend returned clarification needed, propagate it
     if (intent.status === 'clarification_needed') {
-      // For now, try local fallback
-      console.log('Intent needs clarification, trying local fallback');
+      return {
+        status: 'clarification_needed',
+        message: intent.message,
+        suggestions: intent.suggestions,
+      };
     }
   } catch (error) {
     console.warn('Backend API unavailable, using local fallback:', error.message);
   }
   
-  // Fallback to local mapping
-  const lowerInput = input.toLowerCase()
+  // Fallback to local mapping (offline support)
+  const lowerInput = input.toLowerCase();
+  const trimmed = input.trim();
   
   // First check for explicit ticker symbols (e.g., $TSLA, TSLA)
-  const tickerMatch = input.match(/\$?([A-Z]{1,5})\b/i)
+  const tickerMatch = input.match(/\$?([A-Z]{1,5})\b/i);
   if (tickerMatch) {
-    const potentialTicker = tickerMatch[1].toLowerCase()
+    const potentialTicker = tickerMatch[1].toLowerCase();
     if (tickerMap[potentialTicker]) {
-      return tickerMap[potentialTicker]
+      return tickerMap[potentialTicker];
     }
-    // Fallback: if we don't recognize the ticker, still return it uppercased
-    return { ticker: potentialTicker.toUpperCase(), company: potentialTicker.toUpperCase() }
+    // If we don't recognize the ticker, still return it uppercased
+    return { ticker: potentialTicker.toUpperCase(), company: potentialTicker.toUpperCase() };
   }
   
-  // 2) Company name match
+  // Company name match
   for (const [key, value] of Object.entries(tickerMap)) {
     if (lowerInput.includes(key)) {
-      return value
+      return value;
     }
   }
   
-  // 3) Fallback: attempt to sanitize the first token as ticker
-  const firstToken = trimmed.split(/\s+/)[0] || ''
-  const sanitized = firstToken.replace(/[^A-Za-z0-9\.\-]/g, '')
+  // Attempt to sanitize the first token as ticker
+  const firstToken = trimmed.split(/\s+/)[0] || '';
+  const sanitized = firstToken.replace(/[^A-Za-z0-9.\-]/g, '');
   if (sanitized.length >= 1 && sanitized.length <= 7) {
-    return { ticker: sanitized.toUpperCase(), company: sanitized.toUpperCase() }
+    return { ticker: sanitized.toUpperCase(), company: sanitized.toUpperCase() };
   }
 
   // If no match found, throw error
-  throw new Error('Could not identify stock ticker from input')
+  throw new Error('Could not identify stock ticker from input');
 }
 
 /**
- * Get source documents for a ticker
- * Will use real data when available from backend/Convex
- * @param {string} ticker
- * @returns {Array}
+ * Get company name from ticker using local mapping
+ * @param {string} ticker - Stock ticker symbol
+ * @returns {string} Company name or ticker if not found
  */
-export function getSourceDocuments(ticker) {
-  const companyName = Object.values(tickerMap).find(v => v.ticker === ticker)?.company || ticker
-  
-  return [
-    { id: 1, name: `${ticker} 2024 10-K.pdf`, type: 'SEC Filing', pages: 142, date: '2024-02-15' },
-    { id: 2, name: `${ticker} Q3 Earnings.pdf`, type: 'Earnings Report', pages: 28, date: '2024-10-25' },
-    { id: 3, name: `Bloomberg_${ticker}_Analysis.pdf`, type: 'Research', pages: 15, date: '2024-11-01' },
-    { id: 4, name: `Reuters_${ticker}_News.pdf`, type: 'News Article', pages: 3, date: '2024-11-28' },
-    { id: 5, name: `WSJ_${ticker}_Interview.pdf`, type: 'Interview', pages: 8, date: '2024-12-01' },
-  ]
+export function getCompanyName(ticker) {
+  const upperTicker = ticker.toUpperCase();
+  const entry = Object.values(tickerMap).find(v => v.ticker === upperTicker);
+  return entry?.company || ticker;
 }
 
 /**
- * Get key insights for a ticker
- * Will use real data when available from backend/Convex
- * @param {string} ticker
- * @returns {Array}
+ * Check if a ticker exists in our local mapping
+ * @param {string} ticker - Stock ticker symbol
+ * @returns {boolean}
  */
-export function getKeyInsights(ticker) {
-  const insights = {
-    TSLA: [
-      { type: 'bullish', title: 'Revenue Growth', text: 'Q3 revenue up 8% YoY to $25.2B, beating estimates.' },
-      { type: 'bearish', title: 'Margin Pressure', text: 'Gross margins declined to 17.9% due to price cuts.' },
-      { type: 'neutral', title: 'FSD Progress', text: 'Full Self-Driving v12 showing improved performance metrics.' },
-      { type: 'bullish', title: 'Energy Storage', text: 'Megapack deployments grew 90% YoY, diversifying revenue.' },
-    ],
-    AAPL: [
-      { type: 'bullish', title: 'Services Growth', text: 'Services revenue hit record $22.3B, up 14% YoY.' },
-      { type: 'bearish', title: 'China Slowdown', text: 'Greater China revenue declined 2% amid competition.' },
-      { type: 'bullish', title: 'iPhone 16 Launch', text: 'Strong initial demand for iPhone 16 Pro models.' },
-      { type: 'neutral', title: 'AI Integration', text: 'Apple Intelligence rollout expanding to more devices.' },
-    ],
-    NVDA: [
-      { type: 'bullish', title: 'Data Center Boom', text: 'Data center revenue up 112% YoY to $14.5B.' },
-      { type: 'bullish', title: 'AI Leadership', text: 'H100/H200 GPUs dominate AI training market.' },
-      { type: 'bearish', title: 'China Restrictions', text: 'Export controls limiting growth in Chinese market.' },
-      { type: 'neutral', title: 'Blackwell Launch', text: 'Next-gen Blackwell chips ramping production.' },
-    ],
-  }
-  
-  return insights[ticker] || [
-    { type: 'bullish', title: 'Strong Performance', text: 'Company showing solid fundamentals and growth.' },
-    { type: 'bearish', title: 'Market Risks', text: 'Faces headwinds from macroeconomic conditions.' },
-    { type: 'neutral', title: 'Analyst View', text: 'Mixed ratings with average price target upside.' },
-  ]
+export function isKnownTicker(ticker) {
+  const lowerTicker = ticker.toLowerCase();
+  return tickerMap[lowerTicker] !== undefined;
 }
 
-/**
- * Get transcript data for a ticker
- * Will use real data when available from backend/Convex
- * @param {string} ticker
- * @returns {Array}
- */
-export function getTranscript(ticker) {
-  const transcripts = {
-    TSLA: [
-      { id: 1, speaker: 'bull', text: "Let's dive into Tesla's Q3 results. Revenue came in at $25.2 billion, up 8% year over year. That's a solid beat on expectations.", start: 0, end: 8 },
-      { id: 2, speaker: 'bear', text: "Sure, revenue beat, but let's talk about what matters - margins. Gross margins dropped to 17.9%. That's the lowest we've seen in years.", start: 8, end: 16 },
-      { id: 3, speaker: 'bull', text: "Margin compression is temporary. Tesla is strategically cutting prices to eliminate competition. Once they've consolidated market share, margins will recover.", start: 16, end: 26 },
-      { id: 4, speaker: 'bear', text: "That's a big assumption. Meanwhile, BYD is eating their lunch in China. Market share is down to 6.5% from 10% last year.", start: 26, end: 35 },
-      { id: 5, speaker: 'bull', text: "But look at the energy business! Megapack deployments grew 90% year over year. Energy storage is becoming a significant revenue driver.", start: 35, end: 45 },
-      { id: 6, speaker: 'bear', text: "Energy is only 7% of revenue. The core auto business needs to perform. And let's not forget - Cybertruck is still losing money on every unit.", start: 45, end: 55 },
-      { id: 7, speaker: 'bull', text: "Full Self-Driving version 12 is a game changer. The neural network approach is showing real progress. This is Tesla's path to becoming an AI company.", start: 55, end: 65 },
-      { id: 8, speaker: 'bear', text: "We've heard 'robotaxis next year' for five years now. Until FSD actually works without supervision, it's just vaporware.", start: 65, end: 73 },
-    ],
-    AAPL: [
-      { id: 1, speaker: 'bull', text: "Apple just delivered another record quarter. Services revenue hit $22.3 billion, up 14% year over year. The ecosystem is incredibly sticky.", start: 0, end: 10 },
-      { id: 2, speaker: 'bear', text: "Services is great, but hardware is 80% of the business. iPhone revenue was essentially flat, and China is a real problem.", start: 10, end: 20 },
-      { id: 3, speaker: 'bull', text: "iPhone 16 Pro demand is extremely strong. The titanium design and improved cameras are driving upgrades from the installed base.", start: 20, end: 30 },
-      { id: 4, speaker: 'bear', text: "Huawei's comeback in China is stealing market share. Apple fell out of the top 5 smartphone vendors in China for the first time.", start: 30, end: 40 },
-      { id: 5, speaker: 'bull', text: "Apple Intelligence is the real story here. AI features will drive the biggest upgrade cycle in iPhone history.", start: 40, end: 50 },
-      { id: 6, speaker: 'bear', text: "Apple is late to AI. Google and Samsung have had AI features for over a year. Apple is playing catch-up.", start: 50, end: 60 },
-    ],
-    NVDA: [
-      { id: 1, speaker: 'bull', text: "NVIDIA just reported the most incredible quarter in semiconductor history. Data center revenue up 112% to $14.5 billion.", start: 0, end: 10 },
-      { id: 2, speaker: 'bear', text: "Everyone knows the AI story. The question is sustainability. Are we in an AI bubble like crypto mining in 2021?", start: 10, end: 20 },
-      { id: 3, speaker: 'bull', text: "This is completely different. Every major tech company is building AI infrastructure. Microsoft, Google, Amazon, Meta - they're all buying H100s as fast as NVIDIA can make them.", start: 20, end: 32 },
-      { id: 4, speaker: 'bear', text: "But competition is coming. AMD's MI300X is real. And let's not forget the custom chips - Google's TPUs, Amazon's Trainium.", start: 32, end: 42 },
-      { id: 5, speaker: 'bull', text: "CUDA is the moat. Developers have been building on CUDA for 15 years. The switching costs are enormous.", start: 42, end: 52 },
-      { id: 6, speaker: 'bear', text: "China export restrictions are a real headwind. That was a $5 billion market that's now severely limited.", start: 52, end: 62 },
-    ],
-  }
-  
-  return transcripts[ticker] || [
-    { id: 1, speaker: 'bull', text: `Let's analyze ${ticker}. The company has shown solid fundamentals in recent quarters with improving metrics.`, start: 0, end: 10 },
-    { id: 2, speaker: 'bear', text: "While there are positives, we need to consider the risks. Market conditions remain uncertain and competition is intense.", start: 10, end: 20 },
-    { id: 3, speaker: 'bull', text: "The management team has a clear strategy and has been executing well. I'm optimistic about the long-term outlook.", start: 20, end: 30 },
-    { id: 4, speaker: 'bear', text: "Valuation is stretched at current levels. I'd wait for a pullback before building a position.", start: 30, end: 40 },
-  ]
-}
+export default {
+  analyzeRequest,
+  getCompanyName,
+  isKnownTicker,
+};

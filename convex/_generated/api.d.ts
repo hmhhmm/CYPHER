@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as actions_generateDebate from "../actions/generateDebate.js";
 import type * as analyses from "../analyses.js";
 import type * as news from "../news.js";
 import type * as partialIntents from "../partialIntents.js";
@@ -20,6 +21,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "actions/generateDebate": typeof actions_generateDebate;
   analyses: typeof analyses;
   news: typeof news;
   partialIntents: typeof partialIntents;

@@ -52,7 +52,7 @@ export default function Terminal() {
     setDisplayedLines(prev => [...prev, { text: processedText, highlight }])
   }, [ticker, company])
 
-  // Run the real pipeline
+  // Run the real pipeline - no mock data fallbacks
   const runPipeline = useCallback(async () => {
     if (pipelineStarted.current) return
     pipelineStarted.current = true
@@ -74,43 +74,64 @@ export default function Terminal() {
       // Step 4: Search for PDF
       addLine(PIPELINE_STEPS[3].text)
       let pdfUrl = null
+      let searchResult = null
       
       try {
-        const searchResult = await searchPDF(ticker, year)
+        searchResult = await searchPDF(ticker, year)
         if (searchResult.results && searchResult.results.length > 0) {
           pdfUrl = searchResult.results[0].url
-          addLine(`> [SUCCESS] Found: ${ticker.toLowerCase()}-10k-${year}.pdf`, 'green')
+          addLine(`> [SUCCESS] Found: ${searchResult.results[0].title || `${ticker}-10k-${year}.pdf`}`, 'green')
         } else {
-          // Use sample data fallback
-          addLine(`> [INFO] Using sample data for ${ticker}`, 'yellow')
+          addLine(`> [WARNING] No SEC filing found for ${ticker} ${year}`, 'yellow')
+          addLine(`> [INFO] Will generate analysis from available market data...`, 'yellow')
         }
       } catch (err) {
-        addLine(`> [INFO] Using sample data for ${ticker}`, 'yellow')
+        console.error('PDF search error:', err)
+        addLine(`> [WARNING] SEC search unavailable: ${err.message}`, 'yellow')
+        addLine(`> [INFO] Will generate analysis from available market data...`, 'yellow')
       }
       setCurrentStep(5)
       await delay(300)
 
-      // Step 5-6: Harvest PDF data
+      // Step 5-6: Harvest PDF data or use minimal data structure
       addLine(PIPELINE_STEPS[5].text)
       await delay(400)
       addLine(PIPELINE_STEPS[6].text)
       
       let harvestedData = null
-      try {
-        if (pdfUrl) {
-          harvestedData = await harvestPDF(pdfUrl, ticker, company)
-        } else {
-          // Use sample data
-          harvestedData = await getSampleHarvestedData(ticker, company)
+      
+      if (pdfUrl) {
+        try {
+          const harvestResult = await harvestPDF(pdfUrl, ticker, company)
+          harvestedData = harvestResult.harvestedData || harvestResult
+          addLine(PIPELINE_STEPS[7].text, 'green')
+        } catch (err) {
+          console.error('Harvest error:', err)
+          addLine(`> [WARNING] Could not extract PDF data: ${err.message}`, 'yellow')
         }
-        addLine(PIPELINE_STEPS[7].text, 'green')
-        setPipelineData(prev => ({ ...prev, harvestedData, pdfUrl }))
-      } catch (err) {
-        console.error('Harvest error:', err)
-        harvestedData = await getSampleHarvestedData(ticker, company)
-        addLine(`> [FALLBACK] Using cached financial data`, 'yellow')
-        setPipelineData(prev => ({ ...prev, harvestedData }))
       }
+      
+      // If no harvested data, create minimal structure for debate generation
+      // The backend will use news and other sources
+      if (!harvestedData) {
+        harvestedData = {
+          meta: {
+            ticker: ticker.toUpperCase(),
+            company: company,
+            report_type: 'Market Analysis',
+            period: year.toString(),
+            source_url: 'Generated from market data and news',
+          },
+          content: {
+            management_discussion: `Analysis based on available market data for ${company} (${ticker}).`,
+            risk_factors: 'Risk analysis generated from market conditions and news sources.',
+            key_financials: 'Financial metrics sourced from public market information.',
+          },
+        }
+        addLine(`> [INFO] Using market data and news for analysis`, 'yellow')
+      }
+      
+      setPipelineData(prev => ({ ...prev, harvestedData, pdfUrl }))
       setCurrentStep(8)
       await delay(300)
 
@@ -123,15 +144,33 @@ export default function Terminal() {
       let debateResult = null
       try {
         debateResult = await generateDebate(harvestedData)
-        addLine(PIPELINE_STEPS[10].text, 'green')
-        setPipelineData(prev => ({ ...prev, debateScript: debateResult.script }))
+        if (debateResult.script && debateResult.script.length > 0) {
+          addLine(PIPELINE_STEPS[10].text, 'green')
+          setPipelineData(prev => ({ ...prev, debateScript: debateResult.script }))
+        } else {
+          throw new Error('No debate script generated')
+        }
       } catch (err) {
         console.error('Debate generation error:', err)
-        // Use fallback transcript
-        debateResult = { script: getFallbackDebateScript(ticker) }
-        addLine(`> [FALLBACK] Using pre-generated debate`, 'yellow')
-        setPipelineData(prev => ({ ...prev, debateScript: debateResult.script }))
+        addLine(`> [ERROR] Debate generation failed: ${err.message}`, 'red')
+        setError(err.message)
+        
+        // Navigate to dashboard anyway - it will show error state
+        await delay(1000)
+        sessionStorage.setItem('cypher_analysis', JSON.stringify({
+          ticker,
+          company,
+          year,
+          harvestedData,
+          debateScript: null,
+          pdfUrl,
+          timestamp: Date.now(),
+          error: err.message,
+        }))
+        navigate(`/dashboard?ticker=${ticker}&company=${encodeURIComponent(company)}&error=debate_failed`)
+        return
       }
+      
       setCurrentStep(11)
       await delay(300)
 
@@ -160,10 +199,10 @@ export default function Terminal() {
     } catch (err) {
       console.error('Pipeline error:', err)
       setError(err.message)
-      addLine(`> [ERROR] ${err.message}`, 'red')
-      addLine(`> Retrying with fallback data...`, 'yellow')
+      addLine(`> [ERROR] Pipeline failed: ${err.message}`, 'red')
+      addLine(`> [INFO] Redirecting to dashboard with limited data...`, 'yellow')
       
-      // Try to continue with fallback
+      // Store error state and navigate to dashboard
       setTimeout(() => {
         sessionStorage.setItem('cypher_analysis', JSON.stringify({
           ticker,
@@ -173,9 +212,9 @@ export default function Terminal() {
           debateScript: null,
           pdfUrl: null,
           timestamp: Date.now(),
-          useFallback: true,
+          error: err.message,
         }))
-        navigate(`/dashboard?ticker=${ticker}&company=${encodeURIComponent(company)}`)
+        navigate(`/dashboard?ticker=${ticker}&company=${encodeURIComponent(company)}&error=pipeline_failed`)
       }, 2000)
     }
   }, [ticker, company, year, addLine, navigate])
@@ -307,7 +346,7 @@ export default function Terminal() {
                 <div className="flex items-center gap-2">
                   <Activity size={14} className="text-purple-400 animate-pulse" />
                   <span className="text-xs text-purple-400">
-                    {isComplete ? 'COMPLETE' : 'PROCESSING'}
+                    {isComplete ? 'COMPLETE' : error ? 'ERROR' : 'PROCESSING'}
                   </span>
                 </div>
               </div>
@@ -381,7 +420,10 @@ export default function Terminal() {
                 >
                   <div className="flex items-center gap-3">
                     <AlertCircle size={20} className="text-red-400" />
-                    <span className="text-red-400 font-semibold">Error occurred, using fallback...</span>
+                    <div>
+                      <span className="text-red-400 font-semibold">Analysis Error</span>
+                      <p className="text-red-400/70 text-xs mt-1">{error}</p>
+                    </div>
                   </div>
                 </motion.div>
               )}
@@ -391,7 +433,7 @@ export default function Terminal() {
             <div className="px-6 pb-4 space-y-3">
               <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
                 <motion.div 
-                  className="h-full bg-gradient-to-r from-purple-600 via-violet-500 to-purple-600 rounded-full"
+                  className={`h-full rounded-full ${error ? 'bg-red-500' : 'bg-gradient-to-r from-purple-600 via-violet-500 to-purple-600'}`}
                   initial={{ width: 0 }}
                   animate={{ width: `${progress}%` }}
                   transition={{ duration: 0.5 }}
@@ -402,7 +444,7 @@ export default function Terminal() {
                 <div className="flex items-center gap-4 text-xs">
                   <div className="flex items-center gap-2 text-gray-500">
                     <FileSearch size={12} />
-                    <span>Sources: {pipelineData.harvestedData ? '1' : '0'}</span>
+                    <span>Sources: {pipelineData.pdfUrl ? '1' : '0'}</span>
                   </div>
                   <div className="flex items-center gap-2 text-gray-500">
                     <Database size={12} />
@@ -442,7 +484,7 @@ export default function Terminal() {
           animate={{ opacity: 1 }}
           transition={{ delay: 1 }}
         >
-          {isComplete ? 'Analysis complete! Redirecting...' : 'Synthesizing institutional analysis and generating insights...'}
+          {isComplete ? 'Analysis complete! Redirecting...' : error ? 'Redirecting to dashboard...' : 'Synthesizing institutional analysis and generating insights...'}
         </motion.p>
       </motion.div>
     </motion.div>
@@ -452,34 +494,4 @@ export default function Terminal() {
 // Helper function for delays
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-// Sample data fallback
-async function getSampleHarvestedData(ticker, company) {
-  return {
-    meta: {
-      ticker: ticker.toUpperCase(),
-      company: company,
-      report_type: '10-K',
-      period: new Date().getFullYear().toString(),
-      source_url: 'https://www.sec.gov',
-    },
-    content: {
-      management_discussion: `${company} delivered strong performance this fiscal year with revenue growth driven by core business segments. Management remains optimistic about future growth prospects and continues to invest in innovation, market expansion, and operational efficiency. Key highlights include improved margins, successful product launches, and strategic partnerships that position the company well for long-term growth.`,
-      risk_factors: `Key risks include: 1) Intense competition in core markets that could pressure margins. 2) Regulatory and compliance challenges across different jurisdictions. 3) Macroeconomic conditions including inflation and interest rates. 4) Supply chain dependencies and potential disruptions. 5) Technology changes that could disrupt current business models. 6) Key personnel retention and talent acquisition challenges.`,
-      key_financials: `Revenue: Growing year-over-year with strong momentum. Operating Margins: Stable with improvement initiatives underway. Cash Position: Strong balance sheet with adequate liquidity. Debt Levels: Manageable with favorable terms. Free Cash Flow: Positive and supporting shareholder returns.`,
-    },
-  }
-}
-
-// Fallback debate script
-function getFallbackDebateScript(ticker) {
-  return [
-    { id: 1, speaker: 'bull', text: `Let's analyze ${ticker}. The company has shown solid fundamentals with consistent revenue growth and improving margins.`, start: 0, end: 8, duration_estimate: 8 },
-    { id: 2, speaker: 'bear', text: `While the numbers look decent, we need to consider the risks. Competition is intensifying and market conditions remain uncertain.`, start: 8, end: 16, duration_estimate: 8 },
-    { id: 3, speaker: 'bull', text: `That's fair, but management has a clear strategy and has been executing well. Their investments in innovation should pay off.`, start: 16, end: 24, duration_estimate: 8 },
-    { id: 4, speaker: 'bear', text: `Valuation is stretched at current levels. The market may have already priced in the optimistic scenario.`, start: 24, end: 32, duration_estimate: 8 },
-    { id: 5, speaker: 'bull', text: `I disagree on valuation. When you factor in growth potential and market opportunity, the stock looks reasonably priced.`, start: 32, end: 40, duration_estimate: 8 },
-    { id: 6, speaker: 'bear', text: `We'll have to agree to disagree. I'd wait for a better entry point before building a position.`, start: 40, end: 48, duration_estimate: 8 },
-  ]
 }
