@@ -36,7 +36,7 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000'],
+  origin: ['http://localhost:5173', 'http://localhost:3001'],
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
@@ -301,6 +301,7 @@ app.listen(PORT, () => {
 ║   • POST /api/pdf/*         - PDF processing      ║
 ║   • POST /api/debate/*      - Debate generation   ║
 ║   • POST /api/audio/*       - Audio synthesis     ║
+║   • POST /api/news/*        - News search         ║
 ║                                                   ║
 ║   Convex:  ${convex ? '🟢 Connected' : '⚠️  Not configured'}              ║
 ║                                                   ║

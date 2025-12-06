@@ -189,7 +189,7 @@ router.post('/harvest-url', async (req, res) => {
     const cached = await convex.query(api.pdfCache.getByUrl, { pdfUrl });
 
     if (cached) {
-      console.log(`[PDF Harvest URL] Using cached data for ${cacheKey}`);
+      console.log(`[PDF Harvest URL] Using cached data for ${pdfUrl}`);
       
       if (sessionId) {
         await convex.mutation(api.analyses.storeHarvestedData, {

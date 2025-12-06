@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react'
 import { useParams, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Zap, TrendingUp, TrendingDown, Sparkles, AlertCircle } from 'lucide-react'
@@ -7,6 +6,7 @@ import PodcastPlayer from '../components/PodcastPlayer'
 import KeyInsights from '../components/KeyInsights'
 import StockChart from '../components/StockChart'
 import { getSourceDocuments, getKeyInsights, getTranscript } from '../utils/analyzeRequest'
+import { useAnalysisData } from '../hooks/useAnalysis'
 
 export default function Dashboard() {
   const { ticker: paramTicker } = useParams()
@@ -18,25 +18,11 @@ export default function Dashboard() {
   const ticker = paramTicker || searchParams.get('ticker') || location.state?.ticker || 'TSLA'
   const company = searchParams.get('company') || location.state?.company || 'Tesla Inc.'
   
-  const [analysisData, setAnalysisData] = useState(null)
-  const [isRealData, setIsRealData] = useState(false)
-
-  // Load analysis data from sessionStorage
-  useEffect(() => {
-    try {
-      const storedData = sessionStorage.getItem('cypher_analysis')
-      if (storedData) {
-        const parsed = JSON.parse(storedData)
-        // Check if data is for the current ticker and not too old (1 hour)
-        if (parsed.ticker === ticker && (Date.now() - parsed.timestamp) < 3600000) {
-          setAnalysisData(parsed)
-          setIsRealData(!parsed.useFallback && parsed.harvestedData !== null)
-        }
-      }
-    } catch (error) {
-      console.error('Error loading analysis data:', error)
-    }
-  }, [ticker])
+  // Load analysis data from Convex
+  const { data: analysisData, loading } = useAnalysisData(ticker)
+  
+  // Determine if we have real data
+  const isRealData = !!(analysisData?.harvestedData && analysisData?.harvestedData !== null)
   
   // Prepare data - use real data if available, otherwise fall back to mock
   const documents = analysisData?.harvestedData 
@@ -51,7 +37,7 @@ export default function Dashboard() {
     ? normalizeDebateScript(analysisData.debateScript)
     : getTranscript(ticker)
 
-  // Format price with currency
+  // Format price with currency (if available from analysis data)
   const currentPrice = analysisData?.currentPrice || null
 
   return (
