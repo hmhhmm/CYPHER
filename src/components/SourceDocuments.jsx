@@ -8,28 +8,30 @@ import {
   Download,
   FolderOpen,
   ChevronRight,
-  ExternalLink
+  ExternalLink,
+  BarChart3,
+  Mic
 } from 'lucide-react'
 
+// Unified monochrome icons - all use the same dark slate background
 const fileTypeIcons = {
   'SEC Filing': FileSpreadsheet,
-  'Earnings Report': FileText,
+  '10-K': FileSpreadsheet,
+  '10-Q': FileSpreadsheet,
+  'Earnings Report': BarChart3,
+  'Earnings': BarChart3,
   'Research': FileText,
   'News Article': Newspaper,
-  'Interview': FileText,
+  'News': Newspaper,
+  'Interview': Mic,
 }
 
-const fileTypeColors = {
-  'SEC Filing': 'text-blue-400 bg-blue-500/10 border-blue-500/20',
-  'Earnings Report': 'text-green-400 bg-green-500/10 border-green-500/20',
-  'Research': 'text-purple-400 bg-purple-500/10 border-purple-500/20',
-  'News Article': 'text-orange-400 bg-orange-500/10 border-orange-500/20',
-  'Interview': 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
-}
-
-export default function SourceDocuments({ documents, ticker }) {
+export default function SourceDocuments({ documents = [], ticker }) {
   const [selectedDoc, setSelectedDoc] = useState(null)
   const [hoveredDoc, setHoveredDoc] = useState(null)
+
+  // Generate source documents from API data if needed
+  const displayDocs = documents.length > 0 ? documents : []
 
   return (
     <div className="flex flex-col h-full">
@@ -40,34 +42,33 @@ export default function SourceDocuments({ documents, ticker }) {
           <h2 className="font-semibold text-white">Source Documents</h2>
         </div>
         <span className="text-xs text-gray-500 bg-white/5 px-2 py-1 rounded-full">
-          {documents.length} files
+          {displayDocs.length} files
         </span>
       </div>
 
       {/* Document List */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-thin">
-        {documents.map((doc, index) => {
+        {displayDocs.map((doc, index) => {
           const IconComponent = fileTypeIcons[doc.type] || FileText
-          const colorClass = fileTypeColors[doc.type] || 'text-gray-400 bg-white/5 border-white/10'
           
           return (
             <motion.div
-              key={doc.id}
+              key={doc.id || index}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: index * 0.1 }}
               className={`relative p-3 rounded-xl border transition-all cursor-pointer ${
-                selectedDoc === doc.id 
+                selectedDoc === (doc.id || index)
                   ? 'bg-purple-500/10 border-purple-500/30' 
                   : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.05] hover:border-white/10'
               }`}
-              onMouseEnter={() => setHoveredDoc(doc.id)}
+              onMouseEnter={() => setHoveredDoc(doc.id || index)}
               onMouseLeave={() => setHoveredDoc(null)}
-              onClick={() => setSelectedDoc(selectedDoc === doc.id ? null : doc.id)}
+              onClick={() => setSelectedDoc(selectedDoc === (doc.id || index) ? null : (doc.id || index))}
             >
               <div className="flex items-start gap-3">
-                {/* Icon */}
-                <div className={`p-2 rounded-lg border ${colorClass}`}>
+                {/* Icon - Unified dark slate/glass background */}
+                <div className="p-2 rounded-lg bg-white/[0.03] border border-white/[0.06] text-purple-400/80">
                   <IconComponent size={16} />
                 </div>
 
@@ -77,21 +78,25 @@ export default function SourceDocuments({ documents, ticker }) {
                     {doc.name}
                   </h3>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className={`text-xs px-2 py-0.5 rounded-full border ${colorClass}`}>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-white/[0.03] border border-white/[0.06] text-gray-400">
                       {doc.type}
                     </span>
-                    <span className="text-xs text-gray-500">
-                      {doc.pages} pages
-                    </span>
+                    {doc.pages && (
+                      <span className="text-xs text-gray-500">
+                        {doc.pages} pages
+                      </span>
+                    )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {doc.date}
-                  </p>
+                  {doc.date && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {doc.date}
+                    </p>
+                  )}
                 </div>
 
                 {/* Action indicator */}
                 <motion.div
-                  animate={{ rotate: selectedDoc === doc.id ? 90 : 0 }}
+                  animate={{ rotate: selectedDoc === (doc.id || index) ? 90 : 0 }}
                   transition={{ duration: 0.2 }}
                 >
                   <ChevronRight size={16} className="text-gray-500" />
@@ -100,7 +105,7 @@ export default function SourceDocuments({ documents, ticker }) {
 
               {/* Expanded Actions */}
               <AnimatePresence>
-                {selectedDoc === doc.id && (
+                {selectedDoc === (doc.id || index) && (
                   <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
@@ -123,7 +128,7 @@ export default function SourceDocuments({ documents, ticker }) {
               </AnimatePresence>
 
               {/* Hover glow effect */}
-              {hoveredDoc === doc.id && (
+              {hoveredDoc === (doc.id || index) && (
                 <motion.div
                   className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-transparent rounded-xl pointer-events-none"
                   initial={{ opacity: 0 }}
@@ -134,6 +139,14 @@ export default function SourceDocuments({ documents, ticker }) {
             </motion.div>
           )
         })}
+
+        {/* Empty state */}
+        {displayDocs.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+            <FolderOpen size={32} className="mb-3 opacity-50" />
+            <p className="text-sm">No source documents</p>
+          </div>
+        )}
       </div>
 
       {/* Footer */}
@@ -146,4 +159,3 @@ export default function SourceDocuments({ documents, ticker }) {
     </div>
   )
 }
-

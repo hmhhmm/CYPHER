@@ -23,6 +23,8 @@ export default function App() {
             <Route path="/" element={<Landing />} />
             <Route path="/terminal" element={<Terminal />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            {/* Dynamic route for ticker-specific dashboard */}
+            <Route path="/dashboard/:ticker" element={<Dashboard />} />
           </Routes>
         </AnimatePresence>
       </div>

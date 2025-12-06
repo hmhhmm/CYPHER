@@ -4,36 +4,63 @@ import {
   TrendingUp, 
   TrendingDown, 
   Minus,
-  Sparkles,
-  ArrowUpRight,
-  ArrowDownRight
+  Sparkles
 } from 'lucide-react'
 
-const insightConfig = {
-  bullish: {
+// Sentiment configuration - minimal, using only thin left border and small dot
+const sentimentConfig = {
+  positive: {
+    borderColor: 'border-l-green-500',
+    dotColor: 'bg-green-500',
+    dotGlow: 'shadow-[0_0_8px_rgba(34,197,94,0.6)]',
     icon: TrendingUp,
-    color: 'text-green-400',
-    bg: 'bg-green-500/10',
-    border: 'border-green-500/20',
-    arrow: ArrowUpRight,
   },
-  bearish: {
+  negative: {
+    borderColor: 'border-l-red-500',
+    dotColor: 'bg-red-500',
+    dotGlow: 'shadow-[0_0_8px_rgba(239,68,68,0.6)]',
     icon: TrendingDown,
-    color: 'text-red-400',
-    bg: 'bg-red-500/10',
-    border: 'border-red-500/20',
-    arrow: ArrowDownRight,
   },
   neutral: {
+    borderColor: 'border-l-gray-500',
+    dotColor: 'bg-gray-500',
+    dotGlow: '',
     icon: Minus,
-    color: 'text-yellow-400',
-    bg: 'bg-yellow-500/10',
-    border: 'border-yellow-500/20',
-    arrow: null,
+  },
+  // Support legacy type names
+  bullish: {
+    borderColor: 'border-l-green-500',
+    dotColor: 'bg-green-500',
+    dotGlow: 'shadow-[0_0_8px_rgba(34,197,94,0.6)]',
+    icon: TrendingUp,
+  },
+  bearish: {
+    borderColor: 'border-l-red-500',
+    dotColor: 'bg-red-500',
+    dotGlow: 'shadow-[0_0_8px_rgba(239,68,68,0.6)]',
+    icon: TrendingDown,
   },
 }
 
-export default function KeyInsights({ insights, ticker }) {
+export default function KeyInsights({ insights = [], ticker }) {
+  // Normalize insight format (support both 'sentiment' and 'type' keys)
+  const normalizedInsights = insights.map(insight => ({
+    ...insight,
+    sentiment: insight.sentiment || insight.type || 'neutral',
+    text: insight.detail || insight.text || '',
+  }))
+
+  // Count sentiments
+  const positiveCount = normalizedInsights.filter(i => 
+    i.sentiment === 'positive' || i.sentiment === 'bullish'
+  ).length
+  const negativeCount = normalizedInsights.filter(i => 
+    i.sentiment === 'negative' || i.sentiment === 'bearish'
+  ).length
+  const neutralCount = normalizedInsights.filter(i => 
+    i.sentiment === 'neutral'
+  ).length
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -51,10 +78,8 @@ export default function KeyInsights({ insights, ticker }) {
       {/* Insights Grid */}
       <div className="flex-1 overflow-y-auto p-3 scrollbar-thin">
         <div className="grid gap-2">
-          {insights.map((insight, index) => {
-            const config = insightConfig[insight.type]
-            const IconComponent = config.icon
-            const ArrowComponent = config.arrow
+          {normalizedInsights.map((insight, index) => {
+            const config = sentimentConfig[insight.sentiment] || sentimentConfig.neutral
             
             return (
               <motion.div
@@ -62,24 +87,19 @@ export default function KeyInsights({ insights, ticker }) {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
-                className={`p-3 rounded-xl border ${config.border} ${config.bg} backdrop-blur-sm`}
+                className={`p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] border-l-2 ${config.borderColor} backdrop-blur-sm`}
               >
                 <div className="flex items-start gap-3">
-                  {/* Icon */}
-                  <div className={`p-1.5 rounded-lg ${config.bg} ${config.color}`}>
-                    <IconComponent size={14} />
+                  {/* Glowing sentiment dot */}
+                  <div className="pt-1">
+                    <div className={`w-2 h-2 rounded-full ${config.dotColor} ${config.dotGlow}`} />
                   </div>
 
                   {/* Content */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className={`text-sm font-medium ${config.color}`}>
-                        {insight.title}
-                      </h3>
-                      {ArrowComponent && (
-                        <ArrowComponent size={12} className={config.color} />
-                      )}
-                    </div>
+                    <h3 className="text-sm font-medium text-white">
+                      {insight.title}
+                    </h3>
                     <p className="text-xs text-gray-400 mt-1 leading-relaxed">
                       {insight.text}
                     </p>
@@ -88,6 +108,14 @@ export default function KeyInsights({ insights, ticker }) {
               </motion.div>
             )
           })}
+
+          {/* Empty state */}
+          {normalizedInsights.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+              <Lightbulb size={32} className="mb-3 opacity-50" />
+              <p className="text-sm">No insights available</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -95,18 +123,18 @@ export default function KeyInsights({ insights, ticker }) {
       <div className="px-4 py-3 border-t border-white/10 bg-white/[0.02]">
         <div className="flex items-center justify-between text-xs">
           <span className="text-gray-500">Overall Sentiment</span>
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1 text-green-400">
-              <TrendingUp size={12} />
-              {insights.filter(i => i.type === 'bullish').length}
+          <div className="flex items-center gap-4">
+            <span className="flex items-center gap-1.5 text-gray-400">
+              <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.6)]" />
+              {positiveCount}
             </span>
-            <span className="flex items-center gap-1 text-red-400">
-              <TrendingDown size={12} />
-              {insights.filter(i => i.type === 'bearish').length}
+            <span className="flex items-center gap-1.5 text-gray-400">
+              <div className="w-1.5 h-1.5 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]" />
+              {negativeCount}
             </span>
-            <span className="flex items-center gap-1 text-yellow-400">
-              <Minus size={12} />
-              {insights.filter(i => i.type === 'neutral').length}
+            <span className="flex items-center gap-1.5 text-gray-400">
+              <div className="w-1.5 h-1.5 rounded-full bg-gray-500" />
+              {neutralCount}
             </span>
           </div>
         </div>
@@ -114,4 +142,3 @@ export default function KeyInsights({ insights, ticker }) {
     </div>
   )
 }
-

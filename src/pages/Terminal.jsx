@@ -6,9 +6,9 @@ import { Activity, Cpu, Database, FileSearch, Wifi, Zap } from 'lucide-react'
 // Terminal log lines for typewriter effect
 const getTerminalLines = (ticker, company) => [
   { text: "> Initializing Cypher Protocol...", delay: 0 },
-  { text: "> Establishing secure connection...", delay: 0 },
+  { text: "> Establishing secure connection to analyst swarm...", delay: 0 },
   { text: `> Target Acquired: $${ticker} (${company})`, delay: 0, highlight: 'cyan' },
-  { text: "> Searching SEC.gov for 10-K filings...", delay: 0 },
+  { text: "> Searching SEC EDGAR for 10-K filings...", delay: 0 },
   { text: `> [SUCCESS] Found: ${ticker.toLowerCase()}-10k-2024.pdf`, delay: 0, highlight: 'green' },
   { text: "> Parsing 142 pages...", delay: 0 },
   { text: "> Extracting financial metrics...", delay: 0 },
@@ -17,8 +17,8 @@ const getTerminalLines = (ticker, company) => [
   { text: "> [SUCCESS] Found 24 relevant articles", delay: 0, highlight: 'green' },
   { text: "> Generating Bull thesis...", delay: 0 },
   { text: "> Generating Bear thesis...", delay: 0 },
-  { text: "> Synthesizing AI debate script...", delay: 0 },
-  { text: "> Compiling market analysis...", delay: 0 },
+  { text: "> Synthesizing institutional analysis...", delay: 0 },
+  { text: "> Compiling market context...", delay: 0 },
   { text: "> [COMPLETE] All systems ready", delay: 0, highlight: 'green' },
   { text: "> LAUNCHING DASHBOARD...", delay: 0, highlight: 'purple' },
 ]
@@ -44,7 +44,9 @@ export default function Terminal() {
       setIsComplete(true)
       // Wait and transition to dashboard
       const timeout = setTimeout(() => {
-        navigate(`/dashboard?ticker=${ticker}&company=${encodeURIComponent(company)}`)
+        navigate(`/dashboard/${ticker}`, { 
+          state: { ticker, company } 
+        })
       }, 800)
       return () => clearTimeout(timeout)
     }
@@ -154,7 +156,7 @@ export default function Terminal() {
             animate={{ scale: [1, 1.2, 1] }}
             transition={{ duration: 1, repeat: Infinity }}
           >
-            <Zap size={20} className="text-yellow-400" />
+            <Zap size={20} className="text-purple-400" />
           </motion.div>
         </motion.div>
 
@@ -216,7 +218,7 @@ export default function Terminal() {
   / ____/ / / / / / __ \\  / / / / / __/ / __ \\
  / /     / /_/ / / /_/ / / /_/ / / _/  / /_/ /
 /_/      \\__, / / .___/ / __  / /___/ / _  _/ 
-        /____/ /_/     /_/ /_/ /____/ /_/ |_|  v2.0`}
+        /____/ /_/     /_/ /_/ /____/ /_/ |_|  v2.1`}
               </pre>
               
               {displayedLines.map((line, index) => (
@@ -231,7 +233,7 @@ export default function Terminal() {
                     <span className="text-green-400">✓</span>
                   )}
                   {line.highlight === 'yellow' && (
-                    <span className="text-yellow-400">⚡</span>
+                    <span className="text-purple-400">⚡</span>
                   )}
                   <span>{line.text}</span>
                 </motion.div>
@@ -309,7 +311,7 @@ export default function Terminal() {
                   <span className="text-xs text-gray-400">AI Engine Active</span>
                 </motion.div>
                 <span className="text-xs text-gray-600">|</span>
-                <span className="text-xs text-gray-500">Model: GPT-4 Turbo</span>
+                <span className="text-xs text-gray-500">Model: Claude Sonnet</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-purple-400 font-mono">${ticker}</span>
@@ -325,10 +327,9 @@ export default function Terminal() {
           animate={{ opacity: 1 }}
           transition={{ delay: 1 }}
         >
-          Analyzing financial data and generating insights...
+          Synthesizing institutional analysis and generating insights...
         </motion.p>
       </motion.div>
     </motion.div>
   )
 }
-

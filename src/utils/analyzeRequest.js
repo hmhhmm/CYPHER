@@ -68,27 +68,37 @@ const tickerMap = {
  * @returns {Promise<{ticker: string, company: string}>}
  */
 export async function analyzeRequest(input) {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 800))
+  // Simulate API delay to keep UX consistent
+  await new Promise(resolve => setTimeout(resolve, 300))
   
-  const lowerInput = input.toLowerCase()
-  
-  // First check for explicit ticker symbols (e.g., $TSLA, TSLA)
-  const tickerMatch = input.match(/\$?([A-Z]{1,5})\b/i)
+  const trimmed = input.trim()
+  const lowerInput = trimmed.toLowerCase()
+
+  // 1) Explicit ticker symbols like $TSLA, tsla, TSLA, V, BRK.B, RIVN, SNOW
+  const tickerMatch = trimmed.match(/\$?([A-Za-z][A-Za-z0-9\.\-]{0,6})\b/)
   if (tickerMatch) {
     const potentialTicker = tickerMatch[1].toLowerCase()
     if (tickerMap[potentialTicker]) {
       return tickerMap[potentialTicker]
     }
+    // Fallback: if we don't recognize the ticker, still return it uppercased
+    return { ticker: potentialTicker.toUpperCase(), company: potentialTicker.toUpperCase() }
   }
   
-  // Search for company names in the input
+  // 2) Company name match
   for (const [key, value] of Object.entries(tickerMap)) {
     if (lowerInput.includes(key)) {
       return value
     }
   }
   
+  // 3) Fallback: attempt to sanitize the first token as ticker
+  const firstToken = trimmed.split(/\s+/)[0] || ''
+  const sanitized = firstToken.replace(/[^A-Za-z0-9\.\-]/g, '')
+  if (sanitized.length >= 1 && sanitized.length <= 7) {
+    return { ticker: sanitized.toUpperCase(), company: sanitized.toUpperCase() }
+  }
+
   // If no match found, throw error
   throw new Error('Could not identify stock ticker from input')
 }

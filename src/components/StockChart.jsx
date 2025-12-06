@@ -75,6 +75,8 @@ export default function StockChart({ ticker }) {
         setTimeout(() => {
           if (isLoading) {
             setIsLoading(false)
+            // If still loading, show fallback chart instead of widget errors
+            setError(true)
           }
         }, 5000)
 
