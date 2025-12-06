@@ -1,0 +1,383 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =============================================
+   CYPHER - THE DARK ENERGY THEME
+   ============================================= */
+
+:root {
+  --cypher-bg: #0A0A0A;
+  --cypher-surface: #111111;
+  --cypher-accent: #8A2BE2;
+  --cypher-accent-rgb: 138, 43, 226;
+  --cypher-glow: rgba(138, 43, 226, 0.6);
+}
+
+/* Base Styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--cypher-bg);
+  color: #ffffff;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* App Wrapper with Grid Background */
+.app-wrapper {
+  position: relative;
+  min-height: 100vh;
+  background: linear-gradient(180deg, #0A0A0A 0%, #111111 50%, #0A0A0A 100%);
+}
+
+/* Grid Texture Background */
+.grid-background {
+  position: fixed;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(138, 43, 226, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(138, 43, 226, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Subtle animated grid pulse */
+.grid-background::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(138, 43, 226, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(138, 43, 226, 0.05) 1px, transparent 1px);
+  background-size: 100px 100px;
+  animation: gridPulse 8s ease-in-out infinite;
+}
+
+@keyframes gridPulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.6; }
+}
+
+/* Vignette Overlay */
+.vignette {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 0%,
+    transparent 40%,
+    rgba(10, 10, 10, 0.4) 70%,
+    rgba(10, 10, 10, 0.8) 100%
+  );
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Central spotlight effect */
+.vignette::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 150%;
+  height: 150%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(138, 43, 226, 0.05) 0%,
+    transparent 50%
+  );
+  animation: spotlightPulse 6s ease-in-out infinite;
+}
+
+@keyframes spotlightPulse {
+  0%, 100% { opacity: 0.5; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 0.8; transform: translate(-50%, -50%) scale(1.1); }
+}
+
+/* =============================================
+   BENTO GRID CARDS
+   ============================================= */
+
+.bento-card {
+  @apply bg-white/[0.03] backdrop-blur-xl border border-white/[0.08] rounded-2xl;
+  @apply transition-all duration-300;
+  @apply hover:border-purple-500/20 hover:bg-white/[0.05];
+  position: relative;
+  overflow: hidden;
+}
+
+.bento-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(138, 43, 226, 0.3),
+    transparent
+  );
+}
+
+.bento-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at top center,
+    rgba(138, 43, 226, 0.05),
+    transparent 70%
+  );
+  pointer-events: none;
+}
+
+/* =============================================
+   CUSTOM SCROLLBAR
+   ============================================= */
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(138, 43, 226, 0.3) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(138, 43, 226, 0.3);
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(138, 43, 226, 0.5);
+}
+
+/* =============================================
+   GLOW EFFECTS
+   ============================================= */
+
+.glow-purple {
+  box-shadow: 
+    0 0 20px rgba(138, 43, 226, 0.4),
+    0 0 40px rgba(138, 43, 226, 0.2),
+    0 0 60px rgba(138, 43, 226, 0.1);
+}
+
+.glow-purple-intense {
+  box-shadow: 
+    0 0 25px rgba(138, 43, 226, 0.6),
+    0 0 50px rgba(138, 43, 226, 0.4),
+    0 0 75px rgba(138, 43, 226, 0.2);
+}
+
+/* Text glow */
+.text-glow-purple {
+  text-shadow: 
+    0 0 20px rgba(138, 43, 226, 0.5),
+    0 0 40px rgba(138, 43, 226, 0.3);
+}
+
+/* =============================================
+   INPUT FOCUS GLOW
+   ============================================= */
+
+input:focus {
+  outline: none;
+}
+
+/* =============================================
+   ANIMATIONS
+   ============================================= */
+
+/* Typewriter cursor blink */
+@keyframes cursorBlink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.cursor-blink {
+  animation: cursorBlink 0.8s infinite;
+}
+
+/* Audio visualizer bar animation */
+@keyframes barBounce {
+  0%, 100% { 
+    transform: scaleY(0.3);
+  }
+  50% { 
+    transform: scaleY(1);
+  }
+}
+
+.audio-bar {
+  animation: barBounce 0.5s ease-in-out infinite;
+  transform-origin: bottom;
+}
+
+/* Pulse ring animation */
+@keyframes pulseRing {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+.pulse-ring {
+  animation: pulseRing 1.5s ease-out infinite;
+}
+
+/* Fade in animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Stagger children animation helper */
+.stagger-children > * {
+  opacity: 0;
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+.stagger-children > *:nth-child(1) { animation-delay: 0.1s; }
+.stagger-children > *:nth-child(2) { animation-delay: 0.2s; }
+.stagger-children > *:nth-child(3) { animation-delay: 0.3s; }
+.stagger-children > *:nth-child(4) { animation-delay: 0.4s; }
+.stagger-children > *:nth-child(5) { animation-delay: 0.5s; }
+
+/* Shimmer effect */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(138, 43, 226, 0.2),
+    transparent
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* =============================================
+   UTILITY CLASSES
+   ============================================= */
+
+/* Glass morphism */
+.glass {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Gradient borders */
+.gradient-border {
+  position: relative;
+  background: var(--cypher-bg);
+}
+
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(138, 43, 226, 0.5),
+    rgba(138, 43, 226, 0.1),
+    rgba(138, 43, 226, 0.5)
+  );
+  -webkit-mask: 
+    linear-gradient(#fff 0 0) content-box, 
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* =============================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================= */
+
+@media (max-width: 768px) {
+  .grid-background {
+    background-size: 30px 30px;
+  }
+  
+  .grid-background::before {
+    background-size: 60px 60px;
+  }
+}
+
+/* =============================================
+   SELECTION STYLES
+   ============================================= */
+
+::selection {
+  background: rgba(138, 43, 226, 0.4);
+  color: #ffffff;
+}
+
+::-moz-selection {
+  background: rgba(138, 43, 226, 0.4);
+  color: #ffffff;
+}
+
+/* =============================================
+   FOCUS VISIBLE STYLES
+   ============================================= */
+
+*:focus-visible {
+  outline: 2px solid rgba(138, 43, 226, 0.6);
+  outline-offset: 2px;
+}
+
+button:focus-visible {
+  outline: 2px solid rgba(138, 43, 226, 0.6);
+  outline-offset: 2px;
+}
+
