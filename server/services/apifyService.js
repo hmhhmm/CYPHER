@@ -10,17 +10,19 @@ const APIFY_API_URL = 'https://api.apify.com/v2';
  * @param {string} ticker - Stock ticker symbol
  * @param {number} year - Filing year
  * @param {string} reportType - Report type (10-K, 10-Q, etc.)
+ * @param {string} company - Company name (optional, for better matching)
  * @returns {Promise<{pdfUrl: string, results: array}>}
  */
-export async function searchSECFilings(ticker, year, reportType = '10-K') {
+export async function searchSECFilings(ticker, year, reportType = '10-K', company = null) {
   if (!process.env.APIFY_API_TOKEN) {
     console.warn('[Apify] API token not configured, using fallback');
-    return fallbackSECSearch(ticker, year, reportType);
+    return fallbackSECSearch(ticker, year, reportType, company);
   }
 
   // Search across multiple trusted sources for annual reports
-  // Use OR operator to search SEC, WSJ, Bloomberg, Reuters, and FT
-  const searchQuery = `${ticker} ${year} annual report ${reportType} (site:sec.gov OR site:wsj.com OR site:bloomberg.com OR site:reuters.com OR site:ft.com) filetype:pdf`;
+  // Include company name in query for better matching: use quotes for exact phrase matching
+  const companyPart = company ? `"${company}" OR ` : '';
+  const searchQuery = `${companyPart}"${ticker}" ${year} annual report ${reportType} (site:sec.gov OR site:wsj.com OR site:bloomberg.com OR site:reuters.com OR site:ft.com) filetype:pdf`;
   
   console.log(`[Apify] Searching across multiple sources: "${searchQuery}"`);
 
@@ -209,13 +211,47 @@ export async function searchSECFilings(ticker, year, reportType = '10-K') {
 
     console.log(`[Apify] Found ${pdfResults.length} PDF results from ${allResults.length} total results`);
 
+    // Step 2: Validate results match the company/ticker
+    const validatedResults = validateResults(pdfResults, ticker, company);
+    console.log(`[Apify] Validation summary:`, {
+      totalResults: pdfResults.length,
+      validatedResults: validatedResults.length,
+      filtered: pdfResults.length - validatedResults.length,
+      company: company || 'N/A',
+      ticker: ticker,
+    });
+
+    // Step 3: Use Claude to validate top results for relevance
+    let finalResults = validatedResults;
+    if (validatedResults.length > 0 && company) {
+      try {
+        console.log(`[Apify] Starting Claude validation for ${validatedResults.length} results...`);
+        finalResults = await validateWithClaude(validatedResults.slice(0, 10), ticker, company);
+        console.log(`[Apify] Claude validation complete:`, {
+          inputCount: validatedResults.length,
+          outputCount: finalResults.length,
+          filtered: validatedResults.length - finalResults.length,
+          company: company,
+          ticker: ticker,
+        });
+      } catch (claudeError) {
+        console.warn('[Apify] Claude validation failed, using basic validation results:', {
+          error: claudeError.message,
+          fallbackCount: validatedResults.length,
+        });
+        // Continue with basic validation results
+      }
+    } else if (!company) {
+      console.log(`[Apify] Skipping Claude validation: company name not provided`);
+    }
+
     return {
       ticker,
       year,
       reportType,
       query: searchQuery,
-      results: pdfResults,
-      pdfUrl: pdfResults[0]?.url || null,
+      results: finalResults,
+      pdfUrl: finalResults[0]?.url || null,
     };
 
   } catch (error) {
@@ -223,7 +259,147 @@ export async function searchSECFilings(ticker, year, reportType = '10-K') {
       message: error.message,
       stack: error.stack,
     });
-    return fallbackSECSearch(ticker, year, reportType);
+    return fallbackSECSearch(ticker, year, reportType, company);
+  }
+}
+
+/**
+ * Validate search results match the company/ticker
+ * @param {Array} results - Search results
+ * @param {string} ticker - Stock ticker symbol
+ * @param {string} company - Company name (optional)
+ * @returns {Array} Filtered results that match
+ */
+function validateResults(results, ticker, company) {
+  const tickerUpper = ticker.toUpperCase();
+  const tickerLower = ticker.toLowerCase();
+  
+  return results.filter(result => {
+    const title = (result.title || '').toLowerCase();
+    const snippet = (result.snippet || '').toLowerCase();
+    const combinedText = `${title} ${snippet}`;
+    
+    // Must contain ticker (exact match, case-insensitive)
+    const hasTicker = combinedText.includes(tickerLower) || combinedText.includes(tickerUpper);
+    
+    if (!hasTicker) {
+      return false;
+    }
+    
+    // If company name provided, check for company name match (partial)
+    if (company) {
+      const companyLower = company.toLowerCase();
+      const companyWords = companyLower.split(/\s+/).filter(w => w.length > 2); // Filter out short words like "Inc", "Corp"
+      const mainCompanyName = companyWords[0] || companyLower; // Use first significant word
+      
+      // Check if title/snippet contains company name
+      const hasCompany = combinedText.includes(mainCompanyName);
+      
+      // Also check for common variations (remove "Inc.", "Corp.", etc.)
+      const companyVariations = [
+        companyLower,
+        companyLower.replace(/\s+(inc|corp|corporation|llc|ltd)\.?$/i, ''),
+        mainCompanyName,
+      ];
+      
+      const hasCompanyVariation = companyVariations.some(variation => 
+        variation && combinedText.includes(variation)
+      );
+      
+      return hasCompanyVariation || hasCompany;
+    }
+    
+    return true;
+  });
+}
+
+/**
+ * Use Claude to validate search results for relevance
+ * @param {Array} results - Search results to validate
+ * @param {string} ticker - Stock ticker symbol
+ * @param {string} company - Company name
+ * @returns {Promise<Array>} Filtered results with relevance >= 0.7
+ */
+async function validateWithClaude(results, ticker, company) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.warn('[Apify] ANTHROPIC_API_KEY not configured, skipping Claude validation');
+    return results;
+  }
+
+  try {
+    const Anthropic = (await import('@anthropic-ai/sdk')).default;
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const resultsText = results.map((r, idx) => 
+      `${idx + 1}. Title: "${r.title}"\n   Snippet: "${r.snippet}"\n   URL: ${r.url}`
+    ).join('\n\n');
+
+    const prompt = `You are a financial data validator. Determine if these search results are relevant to ${company} (${ticker}).
+
+Search Results:
+${resultsText}
+
+For each result, determine if it's actually about ${company} (${ticker}) and not a different company with a similar name or ticker.
+
+Return a JSON array with this structure:
+[
+  {
+    "index": 0,
+    "relevance": 0.0-1.0,
+    "reason": "brief explanation"
+  }
+]
+
+Relevance scores:
+- 0.9-1.0: Definitely about ${company} (${ticker})
+- 0.7-0.89: Likely about ${company} (${ticker})
+- 0.5-0.69: Possibly related but unclear
+- 0.0-0.49: Not about ${company} (${ticker}) or wrong company
+
+Return ONLY the JSON array, no markdown or explanation:`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-3-haiku-20240307',
+      max_tokens: 2000,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    const responseText = response.content[0].text.trim();
+    
+    // Parse JSON response
+    let validations;
+    try {
+      const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        validations = JSON.parse(jsonMatch[0]);
+      } else {
+        validations = JSON.parse(responseText);
+      }
+    } catch (parseError) {
+      console.warn('[Apify] Failed to parse Claude validation response:', parseError);
+      return results; // Return all if parsing fails
+    }
+
+    // Filter results with relevance >= 0.7
+    const validated = results.filter((result, idx) => {
+      const validation = validations.find(v => v.index === idx);
+      if (!validation) return true; // Keep if no validation (safer)
+      
+      const relevance = validation.relevance || 0;
+      if (relevance >= 0.7) {
+        console.log(`[Apify] Result ${idx + 1} validated: relevance=${relevance.toFixed(2)}, reason="${validation.reason}"`);
+        return true;
+      } else {
+        console.log(`[Apify] Result ${idx + 1} filtered: relevance=${relevance.toFixed(2)}, reason="${validation.reason}"`);
+        return false;
+      }
+    });
+
+    return validated;
+
+  } catch (error) {
+    console.error('[Apify] Claude validation error:', error);
+    return results; // Return all if validation fails
   }
 }
 
@@ -231,7 +407,7 @@ export async function searchSECFilings(ticker, year, reportType = '10-K') {
  * Fallback SEC EDGAR direct search
  * Uses SEC's own search when Apify is unavailable
  */
-async function fallbackSECSearch(ticker, year, reportType) {
+async function fallbackSECSearch(ticker, year, reportType, company = null) {
   console.log('[Apify] Using SEC EDGAR fallback');
   
   // SEC EDGAR Full-Text Search API

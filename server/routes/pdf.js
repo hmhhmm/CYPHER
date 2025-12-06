@@ -44,7 +44,20 @@ router.get('/search', async (req, res) => {
 
     console.log(`[PDF Search] ${ticker} ${year} ${reportType}`);
 
-    const searchResults = await searchSECFilings(ticker, year, reportType);
+    // Get company name from analysis session if available
+    let company = null;
+    if (sessionId && convex) {
+      try {
+        const analysis = await convex.query(api.analyses.getBySession, { sessionId });
+        if (analysis && analysis.company) {
+          company = analysis.company;
+        }
+      } catch (err) {
+        // Continue without company name
+      }
+    }
+
+    const searchResults = await searchSECFilings(ticker, year, reportType, company);
 
     // Fetch news articles to include as source documents
     let newsArticles = [];
@@ -384,7 +397,7 @@ router.post('/analyze-complete', async (req, res) => {
 
     // Step 1: Search for SEC filing
     console.log(`[Complete Analysis] Step 1: Searching SEC filings...`);
-    const searchResults = await searchSECFilings(ticker, year, reportType);
+    const searchResults = await searchSECFilings(ticker, year, reportType, company);
 
     if (!searchResults.pdfUrl) {
       return res.status(404).json({
