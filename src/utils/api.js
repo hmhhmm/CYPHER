@@ -2,7 +2,9 @@
  * API client for CYPHER backend
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+// Use relative URLs in production (Vercel), localhost in dev
+const API_BASE_URL = import.meta.env.VITE_API_URL || 
+  (import.meta.env.MODE === 'production' ? '' : 'http://localhost:3001');
 
 /**
  * Generic fetch wrapper with error handling and debug logging
