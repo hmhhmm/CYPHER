@@ -1,6 +1,18 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
+// Get analysis by ticker (using filter instead of index)
+export const getByTicker = query({
+  args: { ticker: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("analyses")
+      .filter((q) => q.eq(q.field("ticker"), args.ticker.toUpperCase()))
+      .order("desc")
+      .first();
+  },
+});
+
 // Create a new analysis session
 export const create = mutation({
   args: {
@@ -267,18 +279,6 @@ export const getBySession = query({
   },
 });
 
-// Get analysis by ticker
-export const getByTicker = query({
-  args: { ticker: v.string() },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("analyses")
-      .withIndex("by_ticker", (q) => q.eq("ticker", args.ticker.toUpperCase()))
-      .order("desc")
-      .first();
-  },
-});
-
 // Get recent analyses for a user
 export const getRecent = query({
   args: { 
@@ -308,9 +308,9 @@ export const getCached = query({
   handler: async (ctx, args) => {
     const cached = await ctx.db
       .query("analyses")
-      .withIndex("by_ticker", (q) => q.eq("ticker", args.ticker.toUpperCase()))
       .filter((q) => 
         q.and(
+          q.eq(q.field("ticker"), args.ticker.toUpperCase()),
           q.eq(q.field("year"), args.year),
           q.eq(q.field("status"), "complete")
         )
@@ -320,5 +320,3 @@ export const getCached = query({
     return cached;
   },
 });
-
-

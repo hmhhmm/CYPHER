@@ -286,7 +286,7 @@ export default function Terminal() {
                 <div className="flex items-center gap-2">
                   <Activity size={14} className="text-purple-400 animate-pulse" />
                   <span className="text-xs text-purple-400">
-                    {isComplete ? 'COMPLETE' : 'PROCESSING'}
+                    {isComplete ? 'COMPLETE' : error ? 'ERROR' : 'PROCESSING'}
                   </span>
                 </div>
               </div>
@@ -360,7 +360,10 @@ export default function Terminal() {
                 >
                   <div className="flex items-center gap-3">
                     <AlertCircle size={20} className="text-red-400" />
-                    <span className="text-red-400 font-semibold">Error occurred, using fallback...</span>
+                    <div>
+                      <span className="text-red-400 font-semibold">Analysis Error</span>
+                      <p className="text-red-400/70 text-xs mt-1">{error}</p>
+                    </div>
                   </div>
                 </motion.div>
               )}
@@ -370,7 +373,7 @@ export default function Terminal() {
             <div className="px-6 pb-4 space-y-3">
               <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
                 <motion.div 
-                  className="h-full bg-gradient-to-r from-purple-600 via-violet-500 to-purple-600 rounded-full"
+                  className={`h-full rounded-full ${error ? 'bg-red-500' : 'bg-gradient-to-r from-purple-600 via-violet-500 to-purple-600'}`}
                   initial={{ width: 0 }}
                   animate={{ width: `${progress}%` }}
                   transition={{ duration: 0.5 }}

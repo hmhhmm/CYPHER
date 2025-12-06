@@ -1,11 +1,10 @@
 import { useParams, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Zap, TrendingUp, TrendingDown, Sparkles, AlertCircle, Download } from 'lucide-react'
+import { ArrowLeft, Zap, Sparkles, AlertCircle, Download } from 'lucide-react'
 import SourceDocuments from '../components/SourceDocuments'
 import PodcastPlayer from '../components/PodcastPlayer'
 import KeyInsights from '../components/KeyInsights'
 import StockChart from '../components/StockChart'
-import AnalysisReport from '../components/AnalysisReport'
 import AnalysisReportViewer from '../components/AnalysisReportViewer'
 import { getSourceDocuments, getKeyInsights, getTranscript } from '../utils/analyzeRequest'
 import { useAnalysisData } from '../hooks/useAnalysis'
@@ -35,7 +34,6 @@ export default function Dashboard() {
     : getKeyInsights(ticker)
   
   // Always use the new conversational mock transcripts for consistent human-like voice
-  // The mock data has been updated with natural conversation flow
   const transcript = getTranscript(ticker)
 
   // Format price with currency (if available from analysis data)
@@ -103,7 +101,7 @@ export default function Dashboard() {
               animate={{ scale: 1 }}
             >
               <AlertCircle size={12} className="text-yellow-400" />
-              <span className="text-xs text-yellow-400 font-medium">Sample Data</span>
+              <span className="text-xs text-yellow-400 font-medium">AI</span>
             </motion.div>
           )}
           
