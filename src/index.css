@@ -340,6 +340,24 @@ input:focus {
 }
 
 /* =============================================
+   TRADINGVIEW WIDGET FIX
+   ============================================= */
+
+.tradingview-widget-container {
+  overflow: hidden !important;
+}
+
+.tradingview-widget-container iframe {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+/* Hide TradingView copyright that causes overflow */
+.tradingview-widget-copyright {
+  display: none !important;
+}
+
+/* =============================================
    RESPONSIVE ADJUSTMENTS
    ============================================= */
 

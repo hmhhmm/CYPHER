@@ -4,10 +4,26 @@ import { api } from '../../convex/_generated/api.js';
 
 const router = express.Router();
 
-// ElevenLabs voice IDs (these are example IDs - replace with actual ones)
+// ElevenLabs voice IDs - Natural conversational voices
 const VOICES = {
-  bull: 'pNInz6obpgDQGcFmaJgB', // Adam - confident, assertive
-  bear: 'yoZ06aMxZJJ28mfd3POQ'  // Sam - analytical, cautious
+  bull: 'TxGEqnHWrfWFTfGW9XjX', // Josh - friendly conversational male
+  bear: '21m00Tcm4TlvDq8ikWAM'  // Rachel - warm natural female
+};
+
+// Voice settings for natural human conversation
+const VOICE_SETTINGS = {
+  bull: {
+    stability: 0.35,           // Lower = more expressive/dynamic
+    similarity_boost: 0.80,    // Voice consistency
+    style: 0.65,               // Conversational style
+    use_speaker_boost: true
+  },
+  bear: {
+    stability: 0.40,
+    similarity_boost: 0.75,
+    style: 0.55,
+    use_speaker_boost: true
+  }
 };
 
 /**
@@ -52,6 +68,7 @@ router.post('/synthesize', async (req, res, next) => {
     // Process each line
     for (const line of debateScript) {
       const voiceId = line.speaker === 'bull' ? VOICES.bull : VOICES.bear;
+      const settings = line.speaker === 'bull' ? VOICE_SETTINGS.bull : VOICE_SETTINGS.bear;
       
       try {
         const response = await fetch(
@@ -65,13 +82,8 @@ router.post('/synthesize', async (req, res, next) => {
             },
             body: JSON.stringify({
               text: line.text,
-              model_id: 'eleven_monolingual_v1',
-              voice_settings: {
-                stability: 0.5,
-                similarity_boost: 0.75,
-                style: line.speaker === 'bull' ? 0.3 : 0.1, // Bull more expressive
-                use_speaker_boost: true
-              }
+              model_id: 'eleven_multilingual_v2',  // Better quality model
+              voice_settings: settings
             })
           }
         );
@@ -171,6 +183,7 @@ router.post('/synthesize-line', async (req, res, next) => {
     }
 
     const voiceId = speaker === 'bull' ? VOICES.bull : VOICES.bear;
+    const settings = speaker === 'bull' ? VOICE_SETTINGS.bull : VOICE_SETTINGS.bear;
 
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
@@ -183,11 +196,8 @@ router.post('/synthesize-line', async (req, res, next) => {
         },
         body: JSON.stringify({
           text,
-          model_id: 'eleven_monolingual_v1',
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.75
-          }
+          model_id: 'eleven_multilingual_v2',  // Better quality model
+          voice_settings: settings
         })
       }
     );

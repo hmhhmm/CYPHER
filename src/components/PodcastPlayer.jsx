@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Play, 
@@ -12,51 +12,211 @@ import {
   Activity
 } from 'lucide-react'
 
+const API_BASE = 'http://localhost:3001'
+
+// Cache for audio blobs to avoid re-generating
+const audioCache = new Map()
+
+// Generate speech using ElevenLabs via backend
+const generateSpeech = async (text, speaker) => {
+  const cacheKey = `${speaker}:${text.substring(0, 50)}`
+  
+  if (audioCache.has(cacheKey)) {
+    return audioCache.get(cacheKey)
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/api/audio/synthesize-line`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, speaker })
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to generate audio')
+    }
+
+    const audioBlob = await response.blob()
+    const audioUrl = URL.createObjectURL(audioBlob)
+    audioCache.set(cacheKey, audioUrl)
+    return audioUrl
+  } catch (error) {
+    console.error('ElevenLabs error:', error)
+    throw error
+  }
+}
+
+// Fallback: Browser's built-in speech synthesis
+const speakWithBrowser = (text, speaker, options = {}) => {
+  return new Promise((resolve, reject) => {
+    if (!window.speechSynthesis) {
+      reject(new Error('Speech synthesis not supported'))
+      return
+    }
+
+    window.speechSynthesis.cancel()
+    const utterance = new SpeechSynthesisUtterance(text)
+    const voices = window.speechSynthesis.getVoices()
+    
+    if (speaker === 'bull') {
+      // Male voice for Bull
+      const maleVoice = voices.find(v => 
+        v.name.includes('Google UK English Male') ||
+        v.name.includes('Daniel') ||
+        v.name.includes('David') ||
+        v.name.includes('James') ||
+        v.name.includes('Male')
+      ) || voices.find(v => v.lang.startsWith('en'))
+      
+      if (maleVoice) utterance.voice = maleVoice
+      utterance.pitch = 0.9
+      utterance.rate = 1.0
+    } else {
+      // Female voice for Bear
+      const femaleVoice = voices.find(v => 
+        v.name.includes('Google UK English Female') ||
+        v.name.includes('Samantha') ||
+        v.name.includes('Victoria') ||
+        v.name.includes('Karen') ||
+        v.name.includes('Female')
+      ) || voices.find(v => v.lang.startsWith('en'))
+      
+      if (femaleVoice) utterance.voice = femaleVoice
+      utterance.pitch = 1.2
+      utterance.rate = 0.95
+    }
+
+    utterance.volume = options.muted ? 0 : (options.volume || 0.8)
+    utterance.onend = () => resolve()
+    utterance.onerror = (e) => reject(e)
+    
+    window.speechSynthesis.speak(utterance)
+  })
+}
+
 export default function PodcastPlayer({ ticker, transcript }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(0)
   const [volume, setVolume] = useState(0.8)
   const [isMuted, setIsMuted] = useState(false)
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0)
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const [voicesLoaded, setVoicesLoaded] = useState(false)
   
-  const audioRef = useRef(null)
   const transcriptRef = useRef(null)
   const progressRef = useRef(null)
+  const playbackRef = useRef({ shouldStop: false })
+  const timeIntervalRef = useRef(null)
+  const audioRef = useRef(null)
 
-  // Simulated audio duration (since we don't have real audio)
-  const simulatedDuration = transcript.length > 0 
+  // Total duration from transcript
+  const totalDuration = transcript.length > 0 
     ? transcript[transcript.length - 1].end 
     : 60
 
-  // Find current segment based on time
+  // Load voices on mount
   useEffect(() => {
-    const segment = transcript.findIndex((seg, index) => {
-      const nextSeg = transcript[index + 1]
-      return currentTime >= seg.start && (nextSeg ? currentTime < nextSeg.start : true)
-    })
+    const loadVoices = () => {
+      const voices = window.speechSynthesis?.getVoices()
+      if (voices && voices.length > 0) {
+        setVoicesLoaded(true)
+      }
+    }
     
-    if (segment !== -1 && segment !== currentSegmentIndex) {
-      setCurrentSegmentIndex(segment)
+    loadVoices()
+    window.speechSynthesis?.addEventListener('voiceschanged', loadVoices)
+    
+    return () => {
+      window.speechSynthesis?.removeEventListener('voiceschanged', loadVoices)
+      window.speechSynthesis?.cancel()
     }
-  }, [currentTime, transcript, currentSegmentIndex])
+  }, [])
 
-  // Simulated playback (since we don't have real audio)
-  useEffect(() => {
-    let interval
-    if (isPlaying) {
-      interval = setInterval(() => {
-        setCurrentTime(prev => {
-          if (prev >= simulatedDuration) {
-            setIsPlaying(false)
-            return 0
-          }
-          return prev + 0.1
-        })
+  // Play through the transcript
+  const playTranscript = useCallback(async (startIndex = 0) => {
+    playbackRef.current.shouldStop = false
+    setIsSpeaking(true)
+
+    for (let i = startIndex; i < transcript.length; i++) {
+      if (playbackRef.current.shouldStop) break
+      
+      const segment = transcript[i]
+      setCurrentSegmentIndex(i)
+      setCurrentTime(segment.start)
+
+      // Start time progression for this segment
+      const startTime = Date.now()
+      
+      timeIntervalRef.current = setInterval(() => {
+        const elapsed = (Date.now() - startTime) / 1000
+        setCurrentTime(segment.start + elapsed)
       }, 100)
+
+      try {
+        // Try ElevenLabs first for high-quality AI voices
+        const audioUrl = await generateSpeech(segment.text, segment.speaker)
+        
+        if (playbackRef.current.shouldStop) break
+        
+        // Play the audio
+        await new Promise((resolve, reject) => {
+          const audio = new Audio(audioUrl)
+          audioRef.current = audio
+          audio.volume = isMuted ? 0 : volume
+          
+          audio.onended = () => resolve()
+          audio.onerror = () => reject(new Error('Audio playback failed'))
+          
+          audio.play().catch(reject)
+        })
+        
+      } catch (err) {
+        console.warn('ElevenLabs failed, using browser speech:', err.message)
+        
+        if (playbackRef.current.shouldStop) break
+        
+        // Fallback to browser speech synthesis
+        try {
+          await speakWithBrowser(segment.text, segment.speaker, { volume, muted: isMuted })
+        } catch (browserErr) {
+          console.warn('Browser speech also failed:', browserErr)
+          // Wait estimated duration if all fails
+          await new Promise(resolve => setTimeout(resolve, (segment.end - segment.start) * 1000))
+        }
+      }
+
+      clearInterval(timeIntervalRef.current)
+      
+      // Small pause between speakers
+      if (i < transcript.length - 1 && !playbackRef.current.shouldStop) {
+        await new Promise(resolve => setTimeout(resolve, 400))
+      }
     }
-    return () => clearInterval(interval)
-  }, [isPlaying, simulatedDuration])
+
+    // Finished
+    if (!playbackRef.current.shouldStop) {
+      setCurrentTime(0)
+      setCurrentSegmentIndex(0)
+      setIsPlaying(false)
+    }
+    setIsSpeaking(false)
+  }, [transcript, volume, isMuted])
+
+  // Stop playback
+  const stopPlayback = useCallback(() => {
+    playbackRef.current.shouldStop = true
+    window.speechSynthesis?.cancel()
+    clearInterval(timeIntervalRef.current)
+    
+    // Stop any playing audio
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+      audioRef.current = null
+    }
+    
+    setIsSpeaking(false)
+  }, [])
 
   // Auto-scroll transcript
   useEffect(() => {
@@ -68,26 +228,76 @@ export default function PodcastPlayer({ ticker, transcript }) {
     }
   }, [currentSegmentIndex])
 
-  const togglePlay = () => setIsPlaying(!isPlaying)
+  // Handle play/pause toggle
+  const togglePlay = useCallback(() => {
+    if (isPlaying) {
+      stopPlayback()
+      setIsPlaying(false)
+    } else {
+      setIsPlaying(true)
+      playTranscript(currentSegmentIndex)
+    }
+  }, [isPlaying, currentSegmentIndex, playTranscript, stopPlayback])
   
-  const toggleMute = () => setIsMuted(!isMuted)
+  const toggleMute = () => {
+    setIsMuted(!isMuted)
+    // If currently speaking, this will affect the next utterance
+  }
 
   const handleProgressClick = (e) => {
-    if (progressRef.current) {
+    if (progressRef.current && transcript.length > 0) {
       const rect = progressRef.current.getBoundingClientRect()
       const clickX = e.clientX - rect.left
       const percentage = clickX / rect.width
-      setCurrentTime(percentage * simulatedDuration)
+      const targetTime = percentage * totalDuration
+      
+      // Find the segment at this time
+      const segmentIndex = transcript.findIndex((seg, idx) => {
+        const nextSeg = transcript[idx + 1]
+        return targetTime >= seg.start && (nextSeg ? targetTime < nextSeg.start : true)
+      })
+      
+      if (segmentIndex !== -1) {
+        // Stop current playback and start from new segment
+        stopPlayback()
+        setCurrentSegmentIndex(segmentIndex)
+        setCurrentTime(targetTime)
+        
+        if (isPlaying) {
+          setTimeout(() => playTranscript(segmentIndex), 100)
+        }
+      }
     }
   }
 
   const skipBack = () => {
-    setCurrentTime(Math.max(0, currentTime - 10))
+    const prevIndex = Math.max(0, currentSegmentIndex - 1)
+    stopPlayback()
+    setCurrentSegmentIndex(prevIndex)
+    setCurrentTime(transcript[prevIndex]?.start || 0)
+    
+    if (isPlaying) {
+      setTimeout(() => playTranscript(prevIndex), 100)
+    }
   }
 
   const skipForward = () => {
-    setCurrentTime(Math.min(simulatedDuration, currentTime + 10))
+    const nextIndex = Math.min(transcript.length - 1, currentSegmentIndex + 1)
+    stopPlayback()
+    setCurrentSegmentIndex(nextIndex)
+    setCurrentTime(transcript[nextIndex]?.start || 0)
+    
+    if (isPlaying) {
+      setTimeout(() => playTranscript(nextIndex), 100)
+    }
   }
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      stopPlayback()
+    }
+  }, [stopPlayback])
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60)
@@ -96,6 +306,7 @@ export default function PodcastPlayer({ ticker, transcript }) {
   }
 
   const currentSpeaker = transcript[currentSegmentIndex]?.speaker || 'bull'
+  const isActivelySpeaking = isPlaying && isSpeaking
 
   return (
     <div className="flex flex-col h-full">
@@ -106,12 +317,20 @@ export default function PodcastPlayer({ ticker, transcript }) {
           <h2 className="font-semibold text-white">Live Debate</h2>
         </div>
         <motion.div 
-          className="flex items-center gap-2 px-2 py-1 bg-purple-500/10 border border-purple-500/20 rounded-full"
-          animate={isPlaying ? { opacity: [0.7, 1, 0.7] } : {}}
+          className={`flex items-center gap-2 px-2 py-1 border rounded-full ${
+            isActivelySpeaking 
+              ? 'bg-green-500/10 border-green-500/20' 
+              : isPlaying 
+                ? 'bg-yellow-500/10 border-yellow-500/20'
+                : 'bg-purple-500/10 border-purple-500/20'
+          }`}
+          animate={isActivelySpeaking ? { opacity: [0.7, 1, 0.7] } : {}}
           transition={{ duration: 1.5, repeat: Infinity }}
         >
-          <Activity size={12} className={isPlaying ? 'text-purple-400' : 'text-gray-500'} />
-          <span className="text-xs text-purple-400">{isPlaying ? 'PLAYING' : 'PAUSED'}</span>
+          <Activity size={12} className={isActivelySpeaking ? 'text-green-400' : isPlaying ? 'text-yellow-400' : 'text-gray-500'} />
+          <span className={`text-xs ${isActivelySpeaking ? 'text-green-400' : isPlaying ? 'text-yellow-400' : 'text-purple-400'}`}>
+            {isActivelySpeaking ? 'SPEAKING' : isPlaying ? 'LOADING' : 'READY'}
+          </span>
         </motion.div>
       </div>
 
@@ -122,11 +341,11 @@ export default function PodcastPlayer({ ticker, transcript }) {
           <div className="text-center">
             <motion.div 
               className={`relative w-20 h-20 md:w-28 md:h-28 rounded-full flex items-center justify-center text-4xl md:text-5xl transition-all duration-300
-                ${currentSpeaker === 'bull' && isPlaying
+                ${currentSpeaker === 'bull' && isActivelySpeaking
                   ? 'bg-gradient-to-br from-green-500/40 to-green-600/20 border-2 border-green-400' 
                   : 'bg-white/5 border border-white/10'
                 }`}
-              animate={currentSpeaker === 'bull' && isPlaying ? {
+              animate={currentSpeaker === 'bull' && isActivelySpeaking ? {
                 boxShadow: [
                   '0 0 0 0 rgba(34, 197, 94, 0.4)',
                   '0 0 30px 10px rgba(34, 197, 94, 0.3)',
@@ -137,7 +356,7 @@ export default function PodcastPlayer({ ticker, transcript }) {
             >
               🐂
               {/* Pulse rings */}
-              {currentSpeaker === 'bull' && isPlaying && (
+              {currentSpeaker === 'bull' && isActivelySpeaking && (
                 <>
                   <motion.div 
                     className="absolute inset-0 rounded-full border-2 border-green-400"
@@ -152,7 +371,7 @@ export default function PodcastPlayer({ ticker, transcript }) {
                 </>
               )}
               {/* Speaking indicator */}
-              {currentSpeaker === 'bull' && isPlaying && (
+              {currentSpeaker === 'bull' && isActivelySpeaking && (
                 <motion.div 
                   className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5"
                   initial={{ opacity: 0 }}
@@ -169,7 +388,7 @@ export default function PodcastPlayer({ ticker, transcript }) {
                 </motion.div>
               )}
             </motion.div>
-            <p className={`mt-3 font-semibold transition-colors ${currentSpeaker === 'bull' ? 'text-green-400' : 'text-gray-500'}`}>
+            <p className={`mt-3 font-semibold transition-colors ${currentSpeaker === 'bull' && isActivelySpeaking ? 'text-green-400' : 'text-gray-500'}`}>
               BULL
             </p>
             <p className="text-xs text-gray-600">Optimistic</p>
@@ -179,13 +398,13 @@ export default function PodcastPlayer({ ticker, transcript }) {
           <div className="flex flex-col items-center">
             <motion.div 
               className="text-2xl font-black text-purple-500/50"
-              animate={{ scale: isPlaying ? [1, 1.1, 1] : 1 }}
+              animate={{ scale: isActivelySpeaking ? [1, 1.1, 1] : 1 }}
               transition={{ duration: 2, repeat: Infinity }}
             >
               VS
             </motion.div>
             <div className="flex gap-1 mt-2">
-              <Mic size={12} className={currentSpeaker === 'bull' ? 'text-green-400' : 'text-red-400'} />
+              <Mic size={12} className={isActivelySpeaking ? (currentSpeaker === 'bull' ? 'text-green-400' : 'text-red-400') : 'text-gray-500'} />
             </div>
           </div>
 
@@ -193,11 +412,11 @@ export default function PodcastPlayer({ ticker, transcript }) {
           <div className="text-center">
             <motion.div 
               className={`relative w-20 h-20 md:w-28 md:h-28 rounded-full flex items-center justify-center text-4xl md:text-5xl transition-all duration-300
-                ${currentSpeaker === 'bear' && isPlaying
+                ${currentSpeaker === 'bear' && isActivelySpeaking
                   ? 'bg-gradient-to-br from-red-500/40 to-red-600/20 border-2 border-red-400' 
                   : 'bg-white/5 border border-white/10'
                 }`}
-              animate={currentSpeaker === 'bear' && isPlaying ? {
+              animate={currentSpeaker === 'bear' && isActivelySpeaking ? {
                 boxShadow: [
                   '0 0 0 0 rgba(239, 68, 68, 0.4)',
                   '0 0 30px 10px rgba(239, 68, 68, 0.3)',
@@ -208,7 +427,7 @@ export default function PodcastPlayer({ ticker, transcript }) {
             >
               🐻
               {/* Pulse rings */}
-              {currentSpeaker === 'bear' && isPlaying && (
+              {currentSpeaker === 'bear' && isActivelySpeaking && (
                 <>
                   <motion.div 
                     className="absolute inset-0 rounded-full border-2 border-red-400"
@@ -223,7 +442,7 @@ export default function PodcastPlayer({ ticker, transcript }) {
                 </>
               )}
               {/* Speaking indicator */}
-              {currentSpeaker === 'bear' && isPlaying && (
+              {currentSpeaker === 'bear' && isActivelySpeaking && (
                 <motion.div 
                   className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5"
                   initial={{ opacity: 0 }}
@@ -240,7 +459,7 @@ export default function PodcastPlayer({ ticker, transcript }) {
                 </motion.div>
               )}
             </motion.div>
-            <p className={`mt-3 font-semibold transition-colors ${currentSpeaker === 'bear' ? 'text-red-400' : 'text-gray-500'}`}>
+            <p className={`mt-3 font-semibold transition-colors ${currentSpeaker === 'bear' && isActivelySpeaking ? 'text-red-400' : 'text-gray-500'}`}>
               BEAR
             </p>
             <p className="text-xs text-gray-600">Skeptical</p>
@@ -264,7 +483,14 @@ export default function PodcastPlayer({ ticker, transcript }) {
                 ? 'bg-purple-600/20 border border-purple-500/40 active-segment' 
                 : 'bg-white/[0.02] border border-transparent hover:bg-white/[0.04]'
             }`}
-            onClick={() => setCurrentTime(segment.start)}
+            onClick={() => {
+              stopPlayback()
+              setCurrentSegmentIndex(index)
+              setCurrentTime(segment.start)
+              if (isPlaying) {
+                setTimeout(() => playTranscript(index), 100)
+              }
+            }}
           >
             <div className="flex items-center gap-2 mb-2">
               <span className={`text-xs font-bold px-2 py-0.5 rounded ${
@@ -306,18 +532,18 @@ export default function PodcastPlayer({ ticker, transcript }) {
         >
           <motion.div 
             className="absolute left-0 top-0 h-full bg-gradient-to-r from-purple-600 to-violet-500 rounded-full"
-            style={{ width: `${(currentTime / simulatedDuration) * 100}%` }}
+            style={{ width: `${(currentTime / totalDuration) * 100}%` }}
           />
           <motion.div 
             className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
-            style={{ left: `calc(${(currentTime / simulatedDuration) * 100}% - 6px)` }}
+            style={{ left: `calc(${(currentTime / totalDuration) * 100}% - 6px)` }}
           />
         </div>
 
         {/* Time Display */}
         <div className="flex justify-between text-xs text-gray-500 mb-4 font-mono">
           <span>{formatTime(currentTime)}</span>
-          <span>{formatTime(simulatedDuration)}</span>
+          <span>{formatTime(totalDuration)}</span>
         </div>
 
         {/* Control Buttons */}
@@ -370,12 +596,12 @@ export default function PodcastPlayer({ ticker, transcript }) {
               <motion.div
                 key={i}
                 className="w-1 bg-gradient-to-t from-purple-600 to-violet-400 rounded-full"
-                animate={isPlaying ? {
+                animate={isSpeaking ? {
                   height: ['30%', `${Math.random() * 70 + 30}%`, '30%']
                 } : { height: '20%' }}
                 transition={{
                   duration: 0.3 + Math.random() * 0.2,
-                  repeat: isPlaying ? Infinity : 0,
+                  repeat: isSpeaking ? Infinity : 0,
                   delay: i * 0.05,
                 }}
                 style={{ height: '30%' }}

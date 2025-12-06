@@ -4,25 +4,25 @@
 
 const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1';
 
-// Voice IDs for Bull and Bear characters
+// Voice IDs for Bull and Bear - Natural conversational human voices
 const VOICE_CONFIG = {
   bull: {
-    id: 'pNInz6obpgDQGcFmaJgB', // Adam - confident, assertive
-    name: 'Bull (Adam)',
+    id: 'TxGEqnHWrfWFTfGW9XjX', // Josh - friendly conversational male
+    name: 'Bull (Josh - Male)',
     settings: {
-      stability: 0.5,
-      similarity_boost: 0.75,
-      style: 0.3, // More expressive
+      stability: 0.35,         // Lower = more natural variation
+      similarity_boost: 0.80,  // Keeps voice consistent
+      style: 0.65,             // High expressiveness for conversation
       use_speaker_boost: true,
     },
   },
   bear: {
-    id: 'yoZ06aMxZJJ28mfd3POQ', // Sam - analytical, cautious
-    name: 'Bear (Sam)',
+    id: '21m00Tcm4TlvDq8ikWAM', // Rachel - warm natural female
+    name: 'Bear (Rachel - Female)',
     settings: {
-      stability: 0.6,
+      stability: 0.40,
       similarity_boost: 0.75,
-      style: 0.1, // More reserved
+      style: 0.55,             // Natural conversational style
       use_speaker_boost: true,
     },
   },
@@ -59,7 +59,7 @@ export async function synthesizeText(text, speaker = 'bull') {
       },
       body: JSON.stringify({
         text,
-        model_id: 'eleven_monolingual_v1',
+        model_id: 'eleven_multilingual_v2',  // Higher quality, more natural
         voice_settings: voiceConfig.settings,
       }),
     }
