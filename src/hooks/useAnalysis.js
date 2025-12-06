@@ -112,39 +112,50 @@ export function useAnalysisData(ticker) {
         // Map Convex data to frontend format
         // Use sourceDocuments from Apify if available (includes both PDFs and news), limit to 5-6 documents
         documents: convexAnalysis.sourceDocuments && convexAnalysis.sourceDocuments.length > 0
-          ? convexAnalysis.sourceDocuments
-              .slice(0, 6) // Limit to 6 documents (mix of PDFs and news)
-              .map((doc, index) => {
-                // Determine document type based on source and URL
-                let docType = 'SEC Filing';
-                if (doc.source === 'news' || doc.source?.includes('news') || 
-                    doc.url?.includes('wsj.com') || doc.url?.includes('bloomberg.com') || 
-                    doc.url?.includes('reuters.com') || doc.url?.includes('ft.com')) {
-                  // Check if it's actually a news article (not a PDF from these sources)
-                  if (!doc.url?.endsWith('.pdf') && !doc.url?.includes('.pdf')) {
-                    docType = 'News Article';
-                  } else if (doc.url?.includes('sec.gov')) {
+          ? (() => {
+              // First, deduplicate by URL (keep first occurrence)
+              const uniqueDocs = convexAnalysis.sourceDocuments.filter((doc, index, self) =>
+                index === self.findIndex(d => d.url === doc.url && d.url !== '')
+              );
+              
+              // Check if harvestedData.meta.source_url is already in sourceDocuments
+              const harvestedUrl = convexAnalysis.harvestedData?.meta?.source_url;
+              const hasHarvestedUrl = harvestedUrl && uniqueDocs.some(doc => doc.url === harvestedUrl);
+              
+              return uniqueDocs
+                .slice(0, 6) // Limit to 6 documents (mix of PDFs and news)
+                .map((doc, index) => {
+                  // Determine document type based on source and URL
+                  let docType = 'SEC Filing';
+                  if (doc.source === 'news' || doc.source?.includes('news') || 
+                      doc.url?.includes('wsj.com') || doc.url?.includes('bloomberg.com') || 
+                      doc.url?.includes('reuters.com') || doc.url?.includes('ft.com')) {
+                    // Check if it's actually a news article (not a PDF from these sources)
+                    if (!doc.url?.endsWith('.pdf') && !doc.url?.includes('.pdf')) {
+                      docType = 'News Article';
+                    } else if (doc.url?.includes('sec.gov')) {
+                      docType = 'SEC Filing';
+                    } else {
+                      docType = 'Annual Report';
+                    }
+                  } else if (doc.url?.includes('sec.gov') || doc.url?.includes('/Archives/edgar/')) {
                     docType = 'SEC Filing';
-                  } else {
+                  } else if (doc.url?.endsWith('.pdf') || doc.url?.includes('.pdf')) {
                     docType = 'Annual Report';
                   }
-                } else if (doc.url?.includes('sec.gov') || doc.url?.includes('/Archives/edgar/')) {
-                  docType = 'SEC Filing';
-                } else if (doc.url?.endsWith('.pdf') || doc.url?.includes('.pdf')) {
-                  docType = 'Annual Report';
-                }
-                
-                return {
-                  id: `doc-${index}`,
-                  name: doc.title || (docType === 'News Article' ? 'News Article' : 'SEC Filing'),
-                  type: docType,
-                  url: doc.url,
-                  source: doc.url,
-                  snippet: doc.snippet || '',
-                  date: new Date(convexAnalysis.createdAt).toLocaleDateString(),
-                  relevance: 95
-                };
-              })
+                  
+                  return {
+                    id: `doc-${index}`,
+                    name: doc.title || (docType === 'News Article' ? 'News Article' : 'SEC Filing'),
+                    type: docType,
+                    url: doc.url,
+                    source: doc.url,
+                    snippet: doc.snippet || '',
+                    date: new Date(convexAnalysis.createdAt).toLocaleDateString(),
+                    relevance: 95
+                  };
+                });
+            })()
           : convexAnalysis.harvestedData?.meta 
             ? [{
                 id: 'doc-0',
