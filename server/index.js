@@ -349,9 +349,10 @@ app.use((req, res) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`
+// Start server (only in local dev, not in Vercel serverless)
+if (process.env.VERCEL !== '1') {
+  app.listen(PORT, () => {
+    console.log(`
 ╔═══════════════════════════════════════════════════╗
 ║                                                   ║
 ║   🔮 CYPHER API Server                            ║
@@ -370,13 +371,14 @@ app.listen(PORT, () => {
 ║   Convex:  ${convex ? '🟢 Connected' : '⚠️  Not configured'}              ║
 ║                                                   ║
 ╚═══════════════════════════════════════════════════╝
-  `);
-  
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.warn('⚠️  Warning: ANTHROPIC_API_KEY not set in environment');
-    console.warn('   Create a .env file with: ANTHROPIC_API_KEY=your_key_here');
-  }
-});
+    `);
+    
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.warn('⚠️  Warning: ANTHROPIC_API_KEY not set in environment');
+      console.warn('   Create a .env file with: ANTHROPIC_API_KEY=your_key_here');
+    }
+  });
+}
 
 export default app;
 
