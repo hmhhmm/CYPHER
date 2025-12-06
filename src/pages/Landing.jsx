@@ -112,9 +112,9 @@ export default function Landing() {
         }]
       })
 
-      // Navigate to dashboard after a brief delay
+      // Navigate to terminal (loading animation) after a brief delay
       setTimeout(() => {
-        navigate(`/dashboard?ticker=${result.ticker}&company=${encodeURIComponent(result.company)}`)
+        navigate(`/terminal?ticker=${result.ticker}&company=${encodeURIComponent(result.company)}`)
       }, 1500)
     } catch (error) {
       setMessages(prev => {
@@ -136,7 +136,13 @@ export default function Landing() {
   ]
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <motion.div 
+      className="min-h-screen flex flex-col"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.4 }}
+    >
       {/* Hero Section */}
       <main className="flex-1 flex flex-col items-center justify-center px-4 py-12">
         {/* Floating particles */}
@@ -427,7 +433,7 @@ export default function Landing() {
           </p>
         </div>
       </footer>
-    </div>
+    </motion.div>
   )
 }
 

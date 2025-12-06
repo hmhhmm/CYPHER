@@ -20,7 +20,13 @@ export default function Dashboard() {
   const transcript = getTranscript(ticker)
 
   return (
-    <div className="min-h-screen p-4 md:p-6">
+    <motion.div 
+      className="min-h-screen p-4 md:p-6"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.4 }}
+    >
       {/* Top Navigation Bar */}
       <motion.header 
         className="flex items-center justify-between mb-6 px-4 py-3 bg-white/5 backdrop-blur border border-white/10 rounded-xl"
@@ -111,7 +117,7 @@ export default function Dashboard() {
           </div>
         </motion.div>
       </div>
-    </div>
+    </motion.div>
   )
 }
 
