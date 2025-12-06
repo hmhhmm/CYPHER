@@ -34,11 +34,40 @@ const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Log port configuration on startup
+console.log(`[Server] Port: ${PORT} (${process.env.PORT ? 'from environment' : 'default 3001'})`);
+
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3001'],
+  origin: [
+    'http://localhost:5173',
+    `http://localhost:${PORT}`,
+    process.env.FRONTEND_URL || 'http://localhost:5173'
+  ].filter(Boolean),
   credentials: true
 }));
+
+// Request logging middleware (before body parsing to see raw requests)
+app.use((req, res, next) => {
+  const timestamp = new Date().toISOString();
+  const startTime = Date.now();
+  
+  console.log(`\n[${timestamp}] ${req.method} ${req.originalUrl || req.url}`);
+  if (Object.keys(req.query).length > 0) {
+    console.log(`  Query:`, req.query);
+  }
+  
+  // Log response when it finishes
+  const originalSend = res.send;
+  res.send = function(data) {
+    const duration = Date.now() - startTime;
+    console.log(`[${req.method} ${req.originalUrl || req.url}] → ${res.statusCode} (${duration}ms)`);
+    return originalSend.call(this, data);
+  };
+  
+  next();
+});
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -184,14 +213,23 @@ app.post('/api/analyze', async (req, res) => {
 
     console.log(`[ANALYZE] Starting analysis for ${ticker} (${company || 'Unknown'})`);
 
+    // Check if API key is configured
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.warn('[ANALYZE] ANTHROPIC_API_KEY not configured, using fallback');
+      const fallback = buildFallbackAnalysis(ticker, company, query, 'API key not configured');
+      return res.status(200).json(fallback);
+    }
+
     // Call Claude API
-    const message = await anthropic.messages.create({
-      model: ANTHROPIC_MODEL,
-      max_tokens: 2048,
-      messages: [
-        {
-          role: 'user',
-          content: `Provide a comprehensive institutional analysis for ${ticker}${company ? ` (${company})` : ''}.
+    let message;
+    try {
+      message = await anthropic.messages.create({
+        model: ANTHROPIC_MODEL,
+        max_tokens: 2048,
+        messages: [
+          {
+            role: 'user',
+            content: `Provide a comprehensive institutional analysis for ${ticker}${company ? ` (${company})` : ''}.
 
 User query (context): ${query || 'No additional context provided.'}
 
@@ -203,13 +241,39 @@ Consider:
 - Macro factors affecting the stock
 
 Return ONLY valid JSON matching the required schema.`
-        }
-      ],
-      system: SYSTEM_PROMPT
-    });
+          }
+        ],
+        system: SYSTEM_PROMPT
+      });
+    } catch (apiError) {
+      console.error('[ANALYZE] Anthropic API error:', {
+        status: apiError.status,
+        statusCode: apiError.statusCode,
+        message: apiError.message,
+        error: apiError.error,
+      });
+      
+      // Handle specific Anthropic errors
+      if (apiError.status === 401 || apiError.statusCode === 401) {
+        return res.status(500).json({ error: 'Invalid API key' });
+      }
+      if (apiError.status === 429 || apiError.statusCode === 429) {
+        return res.status(429).json({ error: 'Rate limited, please try again' });
+      }
+      
+      // For other API errors, use fallback
+      const fallback = buildFallbackAnalysis(ticker, company, query, apiError.message || 'API error');
+      return res.status(200).json(fallback);
+    }
 
     // Extract the response text
-    const responseText = message.content[0].text;
+    const responseText = message?.content?.[0]?.text;
+    
+    if (!responseText) {
+      console.error('[ANALYZE] No response text from API');
+      const fallback = buildFallbackAnalysis(ticker, company, query, 'No response from API');
+      return res.status(200).json(fallback);
+    }
 
     // Parse JSON from response
     let analysisData;
@@ -232,16 +296,12 @@ Return ONLY valid JSON matching the required schema.`
     res.json(analysisData);
 
   } catch (error) {
-    console.error('[ANALYZE] Error:', error);
+    console.error('[ANALYZE] Unexpected error:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    });
     
-    // Handle specific Anthropic errors with fallback instead of 500
-    if (error.status === 401) {
-      return res.status(500).json({ error: 'Invalid API key' });
-    }
-    if (error.status === 429) {
-      return res.status(429).json({ error: 'Rate limited, please try again' });
-    }
-
     // Generic fallback to keep UI alive
     const { ticker, company, query } = req.body || {};
     const fallback = buildFallbackAnalysis(ticker, company, query, error.message || 'Unknown error');
@@ -279,9 +339,11 @@ app.use((err, req, res, next) => {
 
 // 404 handler
 app.use((req, res) => {
+  console.warn(`[404] ${req.method} ${req.originalUrl || req.url} - Endpoint not found`);
   res.status(404).json({
     error: 'Endpoint not found',
-    code: 'NOT_FOUND'
+    code: 'NOT_FOUND',
+    path: req.originalUrl || req.url
   });
 });
 

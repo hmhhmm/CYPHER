@@ -64,6 +64,35 @@ export const updateStatus = mutation({
   },
 });
 
+// Store source documents from Apify search
+export const storeSourceDocuments = mutation({
+  args: {
+    sessionId: v.string(),
+    sourceDocuments: v.array(v.object({
+      title: v.string(),
+      url: v.string(),
+      snippet: v.string(),
+      source: v.string(),
+    })),
+  },
+  handler: async (ctx, args) => {
+    const analysis = await ctx.db
+      .query("analyses")
+      .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+      .first();
+    
+    if (!analysis) {
+      throw new Error("Analysis not found");
+    }
+    
+    await ctx.db.patch(analysis._id, {
+      sourceDocuments: args.sourceDocuments,
+      status: "harvesting",
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 // Store harvested PDF data
 export const storeHarvestedData = mutation({
   args: {

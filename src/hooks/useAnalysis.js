@@ -110,14 +110,52 @@ export function useAnalysisData(ticker) {
     return {
       data: {
         // Map Convex data to frontend format
-        documents: convexAnalysis.harvestedData?.meta 
-          ? [{
-              title: `${convexAnalysis.harvestedData.meta.report_type} Filing`,
-              source: convexAnalysis.harvestedData.meta.source_url,
-              date: new Date(convexAnalysis.createdAt).toLocaleDateString(),
-              relevance: 95
-            }]
-          : getSourceDocuments(ticker),
+        // Use sourceDocuments from Apify if available (includes both PDFs and news), limit to 5-6 documents
+        documents: convexAnalysis.sourceDocuments && convexAnalysis.sourceDocuments.length > 0
+          ? convexAnalysis.sourceDocuments
+              .slice(0, 6) // Limit to 6 documents (mix of PDFs and news)
+              .map((doc, index) => {
+                // Determine document type based on source and URL
+                let docType = 'SEC Filing';
+                if (doc.source === 'news' || doc.source?.includes('news') || 
+                    doc.url?.includes('wsj.com') || doc.url?.includes('bloomberg.com') || 
+                    doc.url?.includes('reuters.com') || doc.url?.includes('ft.com')) {
+                  // Check if it's actually a news article (not a PDF from these sources)
+                  if (!doc.url?.endsWith('.pdf') && !doc.url?.includes('.pdf')) {
+                    docType = 'News Article';
+                  } else if (doc.url?.includes('sec.gov')) {
+                    docType = 'SEC Filing';
+                  } else {
+                    docType = 'Annual Report';
+                  }
+                } else if (doc.url?.includes('sec.gov') || doc.url?.includes('/Archives/edgar/')) {
+                  docType = 'SEC Filing';
+                } else if (doc.url?.endsWith('.pdf') || doc.url?.includes('.pdf')) {
+                  docType = 'Annual Report';
+                }
+                
+                return {
+                  id: `doc-${index}`,
+                  name: doc.title || (docType === 'News Article' ? 'News Article' : 'SEC Filing'),
+                  type: docType,
+                  url: doc.url,
+                  source: doc.url,
+                  snippet: doc.snippet || '',
+                  date: new Date(convexAnalysis.createdAt).toLocaleDateString(),
+                  relevance: 95
+                };
+              })
+          : convexAnalysis.harvestedData?.meta 
+            ? [{
+                id: 'doc-0',
+                name: `${convexAnalysis.harvestedData.meta.report_type} Filing`,
+                type: convexAnalysis.harvestedData.meta.report_type,
+                url: convexAnalysis.harvestedData.meta.source_url,
+                source: convexAnalysis.harvestedData.meta.source_url,
+                date: new Date(convexAnalysis.createdAt).toLocaleDateString(),
+                relevance: 95
+              }]
+            : getSourceDocuments(ticker),
         
         insights: convexAnalysis.harvestedData?.content
           ? [

@@ -24,10 +24,9 @@ export default function Dashboard() {
   // Determine if we have real data
   const isRealData = !!(analysisData?.harvestedData && analysisData?.harvestedData !== null)
   
-  // Prepare data - use real data if available, otherwise fall back to mock
-  const documents = analysisData?.harvestedData 
-    ? generateDocumentsFromHarvested(analysisData.harvestedData, ticker)
-    : getSourceDocuments(ticker)
+  // Prepare data - use documents from useAnalysisData (already formatted with sourceDocuments)
+  // This will show 4-5 PDFs from Apify with real titles
+  const documents = analysisData?.documents || getSourceDocuments(ticker)
   
   const insights = analysisData?.harvestedData 
     ? generateInsightsFromHarvested(analysisData.harvestedData)

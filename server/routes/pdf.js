@@ -33,7 +33,7 @@ const upload = multer({
  */
 router.get('/search', async (req, res) => {
   try {
-    const { ticker, year, reportType = '10-K' } = req.query;
+    const { ticker, year, reportType = '10-K', sessionId } = req.query;
 
     if (!ticker || !year) {
       return res.status(400).json({
@@ -45,6 +45,62 @@ router.get('/search', async (req, res) => {
     console.log(`[PDF Search] ${ticker} ${year} ${reportType}`);
 
     const searchResults = await searchSECFilings(ticker, year, reportType);
+
+    // Fetch news articles to include as source documents
+    let newsArticles = [];
+    if (sessionId && convex) {
+      try {
+        // Get company name from analysis session if available
+        let company = ticker; // fallback to ticker
+        try {
+          const analysis = await convex.query(api.analyses.getBySession, { sessionId });
+          if (analysis && analysis.company) {
+            company = analysis.company;
+          }
+        } catch (err) {
+          // Continue with ticker as fallback
+        }
+
+        const newsResults = await searchCompanyNews(ticker, company, 5);
+        newsArticles = newsResults.articles || [];
+        console.log(`[PDF Search] Found ${newsArticles.length} news articles`);
+      } catch (newsError) {
+        console.warn('[PDF Search] News fetch failed (non-critical):', newsError.message);
+        // Continue without news
+      }
+    }
+
+    // Combine PDFs and news as source documents
+    const sourceDocuments = [
+      // Add PDF results as source documents
+      ...(searchResults.results || []).map(result => ({
+        title: result.title || 'Annual Report',
+        url: result.url || '',
+        snippet: result.snippet || '',
+        source: result.source || 'apify',
+      })),
+      // Add news articles as source documents
+      ...(newsArticles || []).map(article => ({
+        title: article.title || 'News Article',
+        url: article.url || '',
+        snippet: article.snippet || '',
+        source: article.source || 'news',
+      })),
+    ];
+
+    // Save combined source documents to Convex if sessionId provided
+    if (convex && sessionId && sourceDocuments.length > 0) {
+      try {
+        await convex.mutation(api.analyses.storeSourceDocuments, {
+          sessionId,
+          sourceDocuments: sourceDocuments,
+        });
+        console.log(`[PDF Search] Saved ${sourceDocuments.length} source documents (${searchResults.results?.length || 0} PDFs + ${newsArticles.length} news) to Convex`);
+      } catch (convexError) {
+        console.error('[PDF Search] Failed to save source documents:', convexError);
+        // Continue even if save fails
+      }
+    }
 
     res.json({
       success: true,
@@ -133,6 +189,7 @@ router.post('/harvest', upload.single('pdf'), async (req, res) => {
     if (sessionId) {
       await convex.mutation(api.analyses.storeHarvestedData, {
         sessionId,
+        pdfUrl: sourceUrl || 'uploaded', // Required by Convex mutation
         harvestedData: {
           meta: {
             ticker,
@@ -194,6 +251,7 @@ router.post('/harvest-url', async (req, res) => {
       if (sessionId) {
         await convex.mutation(api.analyses.storeHarvestedData, {
           sessionId,
+          pdfUrl: pdfUrl, // Required by Convex mutation
           harvestedData: cached.harvestedData,
         });
       }
@@ -201,7 +259,7 @@ router.post('/harvest-url', async (req, res) => {
       return res.json({
         success: true,
         source: 'cache',
-        harvestedData: cached.harvestedData.content,
+        harvestedData: cached.harvestedData,
       });
     }
 
@@ -246,6 +304,7 @@ router.post('/harvest-url', async (req, res) => {
     if (sessionId) {
       await convex.mutation(api.analyses.storeHarvestedData, {
         sessionId,
+        pdfUrl, // Required by Convex mutation
         harvestedData: {
           meta: {
             ticker,
@@ -262,7 +321,16 @@ router.post('/harvest-url', async (req, res) => {
     res.json({
       success: true,
       source: 'downloaded',
-      harvestedData,
+      harvestedData: {
+        meta: {
+          ticker,
+          company,
+          report_type: reportType || '10-K',
+          period: period || new Date().getFullYear().toString(),
+          source_url: pdfUrl,
+        },
+        content: harvestedData,
+      },
     });
 
   } catch (error) {
@@ -362,6 +430,7 @@ router.post('/analyze-complete', async (req, res) => {
     console.log(`[Complete Analysis] Step 3: Updating session ${sessionId}`);
     await convex.mutation(api.analyses.storeHarvestedData, {
       sessionId,
+      pdfUrl: searchResults.pdfUrl, // Required by Convex mutation
       harvestedData: {
         meta: {
           ticker,
@@ -382,7 +451,7 @@ router.post('/analyze-complete', async (req, res) => {
       const newsResults = await searchCompanyNews(ticker, company, 10);
       newsArticles = newsResults.articles || [];
 
-      // Save news to Convex
+      // Save news to Convex news table
       if (newsArticles.length > 0) {
         await convex.mutation(api.news.storeNews, {
           ticker,
@@ -392,6 +461,39 @@ router.post('/analyze-complete', async (req, res) => {
     } catch (newsError) {
       console.error('[Complete Analysis] News fetch failed:', newsError);
       // Continue even if news fails
+    }
+
+    // Step 4.5: Combine PDFs and news as sourceDocuments
+    console.log(`[Complete Analysis] Step 4.5: Combining source documents...`);
+    const sourceDocuments = [
+      // Add PDF results as source documents
+      ...(searchResults.results || []).map(pdf => ({
+        title: pdf.title || 'Annual Report',
+        url: pdf.url || '',
+        snippet: pdf.snippet || '',
+        source: pdf.source || 'apify',
+      })),
+      // Add news articles as source documents
+      ...(newsArticles || []).map(article => ({
+        title: article.title || 'News Article',
+        url: article.url || '',
+        snippet: article.snippet || '',
+        source: article.source || 'news',
+      })),
+    ];
+
+    // Save combined sourceDocuments to Convex
+    if (sourceDocuments.length > 0) {
+      try {
+        await convex.mutation(api.analyses.storeSourceDocuments, {
+          sessionId,
+          sourceDocuments: sourceDocuments,
+        });
+        console.log(`[Complete Analysis] Saved ${sourceDocuments.length} source documents (${searchResults.results?.length || 0} PDFs + ${newsArticles.length} news)`);
+      } catch (convexError) {
+        console.error('[Complete Analysis] Failed to save source documents:', convexError);
+        // Continue even if save fails
+      }
     }
 
     // Step 5: Return complete data package
@@ -442,19 +544,50 @@ async function harvestPDFContent(fullText, ticker, company, reportType) {
     ? fullText.substring(0, maxChars) + '\n\n[Document truncated due to length...]'
     : fullText;
 
-  const prompt = `You are a financial analyst extracting key information from a ${reportType} filing for ${company} (${ticker}).
+  const prompt = `You are a financial analyst extracting STOCK-RELATED financial information from a ${reportType} filing for ${company} (${ticker}).
 
-Extract and structure the following information from the document:
+Focus on extracting data that is directly relevant to stock valuation and investment decisions. Extract and structure the following information:
 
-1. **Management Discussion & Analysis (MD&A)**: Key points about business performance, strategy, and outlook
-2. **Risk Factors**: Major risks and uncertainties facing the company
-3. **Key Financials**: Revenue, net income, EPS, cash flow, assets, liabilities (with specific numbers)
+1. **Management Discussion & Analysis (MD&A)**: 
+   - Business performance metrics and trends
+   - Revenue growth, profit margins, operating income
+   - Strategic initiatives and outlook
+   - Segment performance if applicable
+   - Key operational metrics (units sold, production, etc.)
+
+2. **Risk Factors**: 
+   - Market risks affecting stock price
+   - Competitive risks
+   - Regulatory risks
+   - Financial risks (debt, liquidity, credit)
+   - Operational risks
+   - Risks specific to the company's business model
+
+3. **Key Financials** (EXTRACT EXACT NUMBERS):
+   - Revenue/Total Revenue (with year-over-year change)
+   - Net Income (with year-over-year change)
+   - Earnings Per Share (EPS) - Basic and Diluted
+   - Cash and Cash Equivalents
+   - Total Assets
+   - Total Liabilities
+   - Shareholders' Equity
+   - Operating Cash Flow
+   - Free Cash Flow
+   - Shares Outstanding (Basic and Diluted)
+   - Book Value Per Share
+   - Return on Equity (ROE) if available
+   - Return on Assets (ROA) if available
+   - Debt-to-Equity Ratio if available
+   - Current Ratio if available
+   - Any other key financial ratios or metrics
+
+IMPORTANT: Extract actual numbers with units (millions, billions, etc.) and time periods. Focus on data that investors use to evaluate the stock.
 
 Return your response as a JSON object with this structure:
 {
-  "management_discussion": "Detailed summary of MD&A section...",
-  "risk_factors": "Comprehensive list of key risks...",
-  "key_financials": "Revenue: $X billion, Net Income: $Y billion, etc..."
+  "management_discussion": "Detailed summary focusing on financial performance and stock-relevant metrics...",
+  "risk_factors": "Comprehensive list of risks that could affect stock valuation...",
+  "key_financials": "Revenue: $X.XX billion (Y% change), Net Income: $Z.ZZ billion, EPS: $A.AA, Cash: $B.BB billion, Total Assets: $C.CC billion, Shares Outstanding: D.DD billion, etc."
 }
 
 Document text:

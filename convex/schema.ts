@@ -46,6 +46,14 @@ export default defineSchema({
     pdfUrl: v.optional(v.string()),
     pdfHash: v.optional(v.string()),
     
+    // Source documents from Apify search (all PDFs found)
+    sourceDocuments: v.optional(v.array(v.object({
+      title: v.string(),
+      url: v.string(),
+      snippet: v.string(),
+      source: v.string(),
+    }))),
+    
     // Debate script
     debateScript: v.optional(v.array(v.object({
       id: v.number(),
