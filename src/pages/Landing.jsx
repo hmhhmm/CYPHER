@@ -164,9 +164,9 @@ export default function Landing() {
 
   const exampleQueries = [
     "Analyze $TSLA",
-    "How is NVDA doing?",
+    "Search about Alibaba?",
     "Deep dive on Apple",
-    "Microsoft outlook"
+    "How's JP Morgan's market"
   ]
 
   const isMarketOpen = () => {
