@@ -16,65 +16,70 @@ function getSearchSources(ticker, company) {
   const upperTicker = ticker?.toUpperCase() || '';
   
   // Japanese companies (Sony, Toyota, Nintendo, etc.)
-  if (ticker.endsWith('.T') || lowerCompany.includes('japan') || 
+  // Many trade in US and file 20-F with SEC
+  if (ticker.endsWith('.T') || lowerCompany.includes('japan') || lowerCompany.includes('sony') || lowerCompany.includes('toyota') ||
       ['SONY', 'TM', 'NTDOY', 'HMC', '7203.T', '6758.T'].includes(upperTicker)) {
     return {
-      sites: 'site:irwebcasting.com OR site:kabu.com OR site:nikkei.com OR site:kabutan.jp',
-      reportType: 'annual report OR earnings report OR financial results OR 有価証券報告書',
+      sites: 'site:sec.gov OR site:wsj.com OR site:bloomberg.com OR site:reuters.com OR site:ft.com OR site:irwebcasting.com',
+      reportType: 'annual report OR 20-F OR earnings report OR financial results',
       language: 'en',
-      country: 'jp',
+      country: 'us', // Search globally with US bias for ADRs
       countryName: 'Japanese'
     };
   }
   
   // UK companies (BP, HSBC, Vodafone, etc.)
+  // Many trade in US and file 20-F with SEC
   if (ticker.endsWith('.L') || ticker.endsWith('.LON') || 
       ['BP', 'HSBA', 'VOD', 'GSK', 'AZN', 'SHEL'].includes(upperTicker) ||
       lowerCompany.includes('london') || lowerCompany.includes('british')) {
     return {
-      sites: 'site:londonstockexchange.com OR site:investegate.co.uk OR site:morningstar.co.uk',
-      reportType: 'annual report OR earnings',
+      sites: 'site:sec.gov OR site:wsj.com OR site:bloomberg.com OR site:reuters.com OR site:londonstockexchange.com OR site:investegate.co.uk',
+      reportType: 'annual report OR 20-F OR earnings',
       language: 'en',
-      country: 'uk',
+      country: 'us',
       countryName: 'UK'
     };
   }
   
   // German companies (SAP, Volkswagen, BMW, etc.)
+  // Many trade in US and file 20-F with SEC
   if (ticker.endsWith('.DE') || ticker.endsWith('.F') || 
       ['SAP', 'VOW', 'BASFY', 'BMW', 'DAI'].includes(upperTicker) ||
       lowerCompany.includes('german') || lowerCompany.includes('deutschland')) {
     return {
-      sites: 'site:boerse-frankfurt.de OR site:finanzen.net OR site:4-traders.com',
-      reportType: 'annual report OR geschäftsbericht OR earnings',
+      sites: 'site:sec.gov OR site:wsj.com OR site:bloomberg.com OR site:reuters.com OR site:boerse-frankfurt.de OR site:finanzen.net',
+      reportType: 'annual report OR 20-F OR geschäftsbericht OR earnings',
       language: 'en',
-      country: 'de',
+      country: 'us',
       countryName: 'German'
     };
   }
   
   // Chinese/Hong Kong companies (Alibaba, Tencent, etc.)
+  // Many trade in US and file 20-F with SEC
   if (ticker.endsWith('.HK') || ticker.endsWith('.SS') || ticker.endsWith('.SZ') ||
       ['BABA', 'TCEHY', 'JD', 'BIDU', '0700.HK', '9988.HK'].includes(upperTicker) ||
-      lowerCompany.includes('hong kong') || lowerCompany.includes('china')) {
+      lowerCompany.includes('hong kong') || lowerCompany.includes('china') || lowerCompany.includes('alibaba')) {
     return {
-      sites: 'site:hkexnews.hk OR site:aastocks.com OR site:etnet.com.hk',
-      reportType: 'annual report OR earnings OR interim report',
+      sites: 'site:sec.gov OR site:wsj.com OR site:bloomberg.com OR site:reuters.com OR site:hkexnews.hk',
+      reportType: 'annual report OR 20-F OR earnings OR interim report',
       language: 'en',
-      country: 'hk',
+      country: 'us',
       countryName: 'Hong Kong/Chinese'
     };
   }
   
   // Canadian companies (Shopify, Royal Bank, etc.)
+  // Many trade in US and file with SEC
   if (ticker.endsWith('.TO') || ticker.endsWith('.V') ||
       ['SHOP', 'RY', 'TD', 'CNQ', 'ENB'].includes(upperTicker) ||
       lowerCompany.includes('canada') || lowerCompany.includes('canadian')) {
     return {
-      sites: 'site:sedar.com OR site:tmx.com OR site:tsx.com',
-      reportType: 'annual report OR earnings OR AIF',
+      sites: 'site:sec.gov OR site:wsj.com OR site:bloomberg.com OR site:reuters.com OR site:sedar.com OR site:tmx.com',
+      reportType: 'annual report OR 10-K OR 20-F OR earnings OR AIF',
       language: 'en',
-      country: 'ca',
+      country: 'us',
       countryName: 'Canadian'
     };
   }
@@ -84,10 +89,10 @@ function getSearchSources(ticker, company) {
       ['BHP', 'CBA', 'NAB', 'WBC'].includes(upperTicker) ||
       lowerCompany.includes('australia') || lowerCompany.includes('australian')) {
     return {
-      sites: 'site:asx.com.au OR site:afr.com OR site:commsec.com.au',
-      reportType: 'annual report OR earnings',
+      sites: 'site:sec.gov OR site:wsj.com OR site:bloomberg.com OR site:reuters.com OR site:asx.com.au',
+      reportType: 'annual report OR 20-F OR earnings',
       language: 'en',
-      country: 'au',
+      country: 'us',
       countryName: 'Australian'
     };
   }
@@ -97,10 +102,10 @@ function getSearchSources(ticker, company) {
       ['MC', 'OR', 'SAN', 'AIR'].includes(upperTicker) ||
       lowerCompany.includes('france') || lowerCompany.includes('french')) {
     return {
-      sites: 'site:euronext.com OR site:boursorama.com OR site:boursier.com',
-      reportType: 'annual report OR rapport annuel OR earnings',
+      sites: 'site:sec.gov OR site:wsj.com OR site:bloomberg.com OR site:reuters.com OR site:euronext.com',
+      reportType: 'annual report OR 20-F OR rapport annuel OR earnings',
       language: 'en',
-      country: 'fr',
+      country: 'us',
       countryName: 'French'
     };
   }
@@ -108,7 +113,7 @@ function getSearchSources(ticker, company) {
   // Default: US companies
   return {
     sites: 'site:sec.gov OR site:wsj.com OR site:bloomberg.com OR site:reuters.com OR site:ft.com',
-    reportType: 'annual report OR 10-K',
+    reportType: 'annual report OR 10-K OR 10-Q',
     language: 'en',
     country: 'us',
     countryName: 'US'

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Activity, Cpu, Database, FileSearch, Wifi, Zap, AlertCircle } from 'lucide-react'
-import { generateDebate, harvestPDF, searchPDF } from '../utils/api'
+import { runAnalysisPipeline } from '../utils/api'
 
 export default function Terminal() {
   const navigate = useNavigate()
@@ -62,132 +62,90 @@ export default function Terminal() {
       await delay(300)
       setCurrentStep(3)
 
-      // Step 4: Search for PDF
-      addLine(`> Searching SEC.gov for ${ticker} filings...`)
+      // Use the real pipeline with progress callbacks
+      addLine(`> Launching AI analysis pipeline for ${ticker}...`)
       setProgress(20)
-      let pdfUrl = null
-      
-      try {
-        const searchResult = await searchPDF(ticker, year)
-        if (searchResult.results && searchResult.results.length > 0) {
-          pdfUrl = searchResult.results[0].url
-          addLine(`> [SUCCESS] Found: ${ticker.toLowerCase()}-10k-${year}.pdf`, 'green')
-          setStats(prev => ({ ...prev, documents: searchResult.results.length }))
-        } else {
-          addLine(`> [INFO] Using sample data for ${ticker}`, 'yellow')
-          setStats(prev => ({ ...prev, documents: 1 }))
+      await delay(300)
+
+      const result = await runAnalysisPipeline(
+        `Analyze ${ticker}`,
+        (status, message) => {
+          // Map pipeline status to terminal messages
+          switch(status) {
+            case 'extracting_intent':
+              addLine(`> Analyzing request intent...`)
+              setProgress(25)
+              break
+            case 'searching_pdf':
+              addLine(`> Searching for ${ticker} filings across multiple sources...`)
+              setStats(prev => ({ ...prev, documents: 1 }))
+              setProgress(35)
+              setCurrentStep(5)
+              break
+            case 'harvesting':
+              addLine(`> Downloading ${ticker} financial documents...`)
+              setProgress(45)
+              addLine(`> Extracting financial metrics for ${ticker}...`)
+              setProgress(50)
+              addLine(`> Analyzing Management Discussion for ${company}...`)
+              setProgress(55)
+              addLine(`> Identifying risk factors in ${ticker} filing...`)
+              setProgress(60)
+              setCurrentStep(8)
+              break
+            case 'generating_debate':
+              addLine(`> [SUCCESS] Harvested MD&A, Risk Factors, Financials`, 'green')
+              setProgress(65)
+              addLine(`> Generating Bull thesis for ${ticker}...`)
+              setProgress(70)
+              addLine(`> Generating Bear thesis for ${ticker}...`)
+              setProgress(75)
+              addLine(`> Synthesizing ${company} debate arguments...`)
+              setProgress(80)
+              setCurrentStep(11)
+              break
+            case 'generating_report':
+              addLine(`> [SUCCESS] AI debate script ready`, 'green')
+              addLine(`> Creating comprehensive analysis report...`)
+              setProgress(85)
+              break
+            case 'synthesizing_audio':
+              addLine(`> Synthesizing audio podcast...`)
+              setProgress(90)
+              break
+            case 'complete':
+              addLine(`> [COMPLETE] ${ticker} analysis ready`, 'green')
+              setProgress(95)
+              addLine(`> LAUNCHING ${ticker} DASHBOARD...`, 'purple')
+              setProgress(100)
+              setCurrentStep(13)
+              setIsComplete(true)
+              break
+          }
+          
+          // Update stats from message if available
+          if (message && message.includes('documents')) {
+            const match = message.match(/(\d+)\s+documents?/)
+            if (match) {
+              setStats(prev => ({ ...prev, documents: parseInt(match[1]) }))
+            }
+          }
+          if (message && message.includes('debate')) {
+            const match = message.match(/(\d+)\s+debate/)
+            if (match) {
+              setStats(prev => ({ ...prev, debateLines: parseInt(match[1]) }))
+            }
+          }
         }
-      } catch (err) {
-        addLine(`> [INFO] Using sample data for ${ticker}`, 'yellow')
-        setStats(prev => ({ ...prev, documents: 1 }))
-      }
-      setProgress(25)
-      setCurrentStep(5)
-      await delay(300)
+      )
 
-      // Step 5: Download and parse
-      addLine(`> Downloading ${ticker} 10-K filing...`)
-      setProgress(35)
-      await delay(400)
-      
-      addLine('> Parsing PDF document...')
-      setProgress(40)
-      await delay(400)
-      
-      // Step 6: Extract with AI
-      addLine(`> Extracting financial metrics for ${ticker}...`)
-      setProgress(45)
-      await delay(500)
-      
-      addLine(`> Analyzing Management Discussion for ${company}...`)
-      setProgress(50)
-      await delay(400)
-      
-      addLine(`> Identifying risk factors in ${ticker} filing...`)
-      setProgress(55)
-      await delay(400)
-      
-      let harvestedData = null
-      try {
-        if (pdfUrl) {
-          harvestedData = await harvestPDF(pdfUrl, ticker, company)
-        } else {
-          harvestedData = await getSampleHarvestedData(ticker, company)
-        }
-        addLine('> [SUCCESS] Harvested MD&A, Risk Factors, Financials', 'green')
-        setProgress(65)
-        setPipelineData(prev => ({ ...prev, harvestedData, pdfUrl }))
-        setStats(prev => ({ ...prev, sources: 1 }))
-      } catch (err) {
-        console.error('Harvest error:', err)
-        harvestedData = await getSampleHarvestedData(ticker, company)
-        addLine(`> [FALLBACK] Using cached financial data for ${ticker}`, 'yellow')
-        setProgress(60)
-        setPipelineData(prev => ({ ...prev, harvestedData }))
-        setStats(prev => ({ ...prev, sources: 1 }))
-      }
-      setCurrentStep(8)
-      await delay(300)
-
-      // Step 7-8: Generate debate
-      addLine(`> Generating Bull thesis for ${ticker}...`)
-      setProgress(70)
-      await delay(600)
-      
-      addLine(`> Generating Bear thesis for ${ticker}...`)
-      setProgress(75)
-      await delay(600)
-      
-      addLine(`> Synthesizing ${company} debate arguments...`)
-      setProgress(80)
-      await delay(500)
-      
-      let debateResult = null
-      try {
-        debateResult = await generateDebate(harvestedData)
-        const debateLength = debateResult.script?.length || 0
-        addLine('> [SUCCESS] AI debate script ready', 'green')
-        setProgress(85)
-        addLine(`> Generated ${debateLength} debate exchanges`)
-        setPipelineData(prev => ({ ...prev, debateScript: debateResult.script }))
-        setStats(prev => ({ ...prev, debateLines: debateLength }))
-      } catch (err) {
-        console.error('Debate generation error:', err)
-        debateResult = { script: getFallbackDebateScript(ticker) }
-        const debateLength = debateResult.script.length
-        addLine(`> [FALLBACK] Using pre-generated debate for ${ticker}`, 'yellow')
-        setProgress(85)
-        setPipelineData(prev => ({ ...prev, debateScript: debateResult.script }))
-        setStats(prev => ({ ...prev, debateLines: debateLength }))
-      }
-      setProgress(90)
-      setCurrentStep(11)
-      await delay(300)
-
-      // Step 9: Complete
-      addLine(`> [COMPLETE] ${ticker} analysis ready`, 'green')
-      setProgress(95)
-      await delay(500)
-      
-      addLine(`> LAUNCHING ${ticker} DASHBOARD...`, 'purple')
-      setProgress(100)
-      setCurrentStep(13)
-      setIsComplete(true)
-
-      // Store data in sessionStorage for Dashboard
-      sessionStorage.setItem('cypher_analysis', JSON.stringify({
-        ticker,
-        company,
-        year,
-        harvestedData,
-        debateScript: debateResult.script,
-        pdfUrl,
-        timestamp: Date.now(),
-      }))
-
-      // Navigate to dashboard
+      // Navigate to dashboard with result
       await delay(800)
-      navigate(`/dashboard/${ticker}?company=${encodeURIComponent(company)}`)
+      if (result && result.sessionId) {
+        navigate(`/dashboard/${ticker}?company=${encodeURIComponent(company)}&sessionId=${result.sessionId}`)
+      } else {
+        navigate(`/dashboard/${ticker}?company=${encodeURIComponent(company)}`)
+      }
 
     } catch (err) {
       console.error('Pipeline error:', err)
@@ -196,22 +154,12 @@ export default function Terminal() {
       addLine(`> Retrying with fallback data for ${ticker}...`, 'yellow')
       setProgress(100)
       
-      // Try to continue with fallback
+      // Navigate to dashboard anyway (it will use fallback data)
       setTimeout(() => {
-        sessionStorage.setItem('cypher_analysis', JSON.stringify({
-          ticker,
-          company,
-          year,
-          harvestedData: null,
-          debateScript: null,
-          pdfUrl: null,
-          timestamp: Date.now(),
-          useFallback: true,
-        }))
         navigate(`/dashboard/${ticker}?company=${encodeURIComponent(company)}`)
       }, 2000)
     }
-  }, [ticker, company, year, addLine, navigate])
+  }, [ticker, company, addLine, navigate])
 
   // Start pipeline on mount
   useEffect(() => {
@@ -352,9 +300,9 @@ export default function Terminal() {
               {/* ASCII Art Header */}
               <pre className="text-purple-500/60 text-xs mb-4 hidden md:block">
 {`   ______  __  __  ____    __  __  ____  ____ 
-  / ____/ / / / / / __ \\  / / / / / __/ / __ \\
- / /     / /_/ / / /_/ / / /_/ / / _/  / /_/ /
-/_/____  \\__, / / .___/ / __  / /___/ / _  _/ 
+  / ______/ / / / / __ \\  / / / / / __/ / __ \\
+ / /       /_/ / / /_/ / / /_/ / / _/  / /_/ /
+/_/____    \__, / / .___/ / __  / /___/ / _  _/ 
 \ ______\/____/ /_/     /_/ /_/ /____/ /_/ |_|  v3.0`}
               </pre>
               
@@ -486,34 +434,4 @@ export default function Terminal() {
 // Helper function for delays
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-// Sample data fallback
-async function getSampleHarvestedData(ticker, company) {
-  return {
-    meta: {
-      ticker: ticker.toUpperCase(),
-      company: company,
-      report_type: '10-K',
-      period: new Date().getFullYear().toString(),
-      source_url: 'https://www.sec.gov',
-    },
-    content: {
-      management_discussion: `${company} delivered strong performance this fiscal year with revenue growth driven by core business segments. Management remains optimistic about future growth prospects and continues to invest in innovation, market expansion, and operational efficiency. Key highlights include improved margins, successful product launches, and strategic partnerships that position the company well for long-term growth.`,
-      risk_factors: `Key risks include: 1) Intense competition in core markets that could pressure margins. 2) Regulatory and compliance challenges across different jurisdictions. 3) Macroeconomic conditions including inflation and interest rates. 4) Supply chain dependencies and potential disruptions. 5) Technology changes that could disrupt current business models. 6) Key personnel retention and talent acquisition challenges.`,
-      key_financials: `Revenue: Growing year-over-year with strong momentum. Operating Margins: Stable with improvement initiatives underway. Cash Position: Strong balance sheet with adequate liquidity. Debt Levels: Manageable with favorable terms. Free Cash Flow: Positive and supporting shareholder returns.`,
-    },
-  }
-}
-
-// Fallback debate script
-function getFallbackDebateScript(ticker) {
-  return [
-    { id: 1, speaker: 'bull', text: `Let's analyze ${ticker}. The company has shown solid fundamentals with consistent revenue growth and improving margins.`, start: 0, end: 8, duration_estimate: 8 },
-    { id: 2, speaker: 'bear', text: `While the numbers look decent, we need to consider the risks. Competition is intensifying and market conditions remain uncertain.`, start: 8, end: 16, duration_estimate: 8 },
-    { id: 3, speaker: 'bull', text: `That's fair, but management has a clear strategy and has been executing well. Their investments in innovation should pay off.`, start: 16, end: 24, duration_estimate: 8 },
-    { id: 4, speaker: 'bear', text: `Valuation is stretched at current levels. The market may have already priced in the optimistic scenario.`, start: 24, end: 32, duration_estimate: 8 },
-    { id: 5, speaker: 'bull', text: `I disagree on valuation. When you factor in growth potential and market opportunity, the stock looks reasonably priced.`, start: 32, end: 40, duration_estimate: 8 },
-    { id: 6, speaker: 'bear', text: `We'll have to agree to disagree. I'd wait for a better entry point before building a position.`, start: 40, end: 48, duration_estimate: 8 },
-  ]
 }
