@@ -4,23 +4,6 @@ import { motion } from 'framer-motion'
 import { Activity, Cpu, Database, FileSearch, Wifi, Zap, AlertCircle } from 'lucide-react'
 import { generateDebate, harvestPDF, searchPDF } from '../utils/api'
 
-// Pipeline steps configuration
-const PIPELINE_STEPS = [
-  { id: 'init', text: '> Initializing Cypher Protocol...', highlight: null },
-  { id: 'connect', text: '> Establishing secure connection...', highlight: null },
-  { id: 'target', text: '> Target Acquired: ${ticker} (${company})', highlight: 'cyan' },
-  { id: 'search', text: '> Searching SEC.gov for 10-K filings...', highlight: null },
-  { id: 'search_done', text: '> [SUCCESS] Found SEC filing', highlight: 'green' },
-  { id: 'download', text: '> Downloading and parsing PDF...', highlight: null },
-  { id: 'extract', text: '> Extracting financial metrics with AI...', highlight: null },
-  { id: 'harvest_done', text: '> [SUCCESS] Harvested MD&A, Risk Factors, Financials', highlight: 'green' },
-  { id: 'debate', text: '> Generating Bull thesis...', highlight: null },
-  { id: 'debate2', text: '> Generating Bear thesis...', highlight: null },
-  { id: 'debate_done', text: '> [SUCCESS] AI debate script ready', highlight: 'green' },
-  { id: 'complete', text: '> [COMPLETE] All systems ready', highlight: 'green' },
-  { id: 'launch', text: '> LAUNCHING DASHBOARD...', highlight: 'purple' },
-]
-
 export default function Terminal() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -33,10 +16,16 @@ export default function Terminal() {
   const [currentStep, setCurrentStep] = useState(0)
   const [isComplete, setIsComplete] = useState(false)
   const [error, setError] = useState(null)
+  const [progress, setProgress] = useState(0)
   const [pipelineData, setPipelineData] = useState({
     harvestedData: null,
     debateScript: null,
     pdfUrl: null,
+  })
+  const [stats, setStats] = useState({
+    sources: 0,
+    debateLines: 0,
+    documents: 0
   })
   
   const terminalRef = useRef(null)
@@ -44,7 +33,6 @@ export default function Terminal() {
 
   // Add a line to the terminal with typewriter effect
   const addLine = useCallback((text, highlight = null) => {
-    // Replace placeholders
     const processedText = text
       .replace('${ticker}', `$${ticker}`)
       .replace('${company}', company)
@@ -52,27 +40,31 @@ export default function Terminal() {
     setDisplayedLines(prev => [...prev, { text: processedText, highlight }])
   }, [ticker, company])
 
-  // Run the real pipeline
+  // Run the real pipeline with dynamic updates
   const runPipeline = useCallback(async () => {
     if (pipelineStarted.current) return
     pipelineStarted.current = true
 
     try {
       // Step 1: Initialize
-      addLine(PIPELINE_STEPS[0].text)
+      addLine('> Initializing Cypher Protocol...')
+      setProgress(5)
       await delay(500)
       
       // Step 2: Connect
-      addLine(PIPELINE_STEPS[1].text)
+      addLine('> Establishing secure connection...')
+      setProgress(10)
       await delay(400)
       
       // Step 3: Target acquired
-      addLine(PIPELINE_STEPS[2].text, 'cyan')
+      addLine(`> Target Acquired: $${ticker} (${company})`, 'cyan')
+      setProgress(15)
       await delay(300)
       setCurrentStep(3)
 
       // Step 4: Search for PDF
-      addLine(PIPELINE_STEPS[3].text)
+      addLine(`> Searching SEC.gov for ${ticker} filings...`)
+      setProgress(20)
       let pdfUrl = null
       
       try {
@@ -80,65 +72,105 @@ export default function Terminal() {
         if (searchResult.results && searchResult.results.length > 0) {
           pdfUrl = searchResult.results[0].url
           addLine(`> [SUCCESS] Found: ${ticker.toLowerCase()}-10k-${year}.pdf`, 'green')
+          setStats(prev => ({ ...prev, documents: searchResult.results.length }))
         } else {
-          // Use sample data fallback
           addLine(`> [INFO] Using sample data for ${ticker}`, 'yellow')
+          setStats(prev => ({ ...prev, documents: 1 }))
         }
       } catch (err) {
         addLine(`> [INFO] Using sample data for ${ticker}`, 'yellow')
+        setStats(prev => ({ ...prev, documents: 1 }))
       }
+      setProgress(25)
       setCurrentStep(5)
       await delay(300)
 
-      // Step 5-6: Harvest PDF data
-      addLine(PIPELINE_STEPS[5].text)
+      // Step 5: Download and parse
+      addLine(`> Downloading ${ticker} 10-K filing...`)
+      setProgress(35)
       await delay(400)
-      addLine(PIPELINE_STEPS[6].text)
+      
+      addLine('> Parsing PDF document...')
+      setProgress(40)
+      await delay(400)
+      
+      // Step 6: Extract with AI
+      addLine(`> Extracting financial metrics for ${ticker}...`)
+      setProgress(45)
+      await delay(500)
+      
+      addLine(`> Analyzing Management Discussion for ${company}...`)
+      setProgress(50)
+      await delay(400)
+      
+      addLine(`> Identifying risk factors in ${ticker} filing...`)
+      setProgress(55)
+      await delay(400)
       
       let harvestedData = null
       try {
         if (pdfUrl) {
           harvestedData = await harvestPDF(pdfUrl, ticker, company)
         } else {
-          // Use sample data
           harvestedData = await getSampleHarvestedData(ticker, company)
         }
-        addLine(PIPELINE_STEPS[7].text, 'green')
+        addLine('> [SUCCESS] Harvested MD&A, Risk Factors, Financials', 'green')
+        setProgress(65)
         setPipelineData(prev => ({ ...prev, harvestedData, pdfUrl }))
+        setStats(prev => ({ ...prev, sources: 1 }))
       } catch (err) {
         console.error('Harvest error:', err)
         harvestedData = await getSampleHarvestedData(ticker, company)
-        addLine(`> [FALLBACK] Using cached financial data`, 'yellow')
+        addLine(`> [FALLBACK] Using cached financial data for ${ticker}`, 'yellow')
+        setProgress(60)
         setPipelineData(prev => ({ ...prev, harvestedData }))
+        setStats(prev => ({ ...prev, sources: 1 }))
       }
       setCurrentStep(8)
       await delay(300)
 
       // Step 7-8: Generate debate
-      addLine(PIPELINE_STEPS[8].text)
-      await delay(500)
-      addLine(PIPELINE_STEPS[9].text)
+      addLine(`> Generating Bull thesis for ${ticker}...`)
+      setProgress(70)
+      await delay(600)
+      
+      addLine(`> Generating Bear thesis for ${ticker}...`)
+      setProgress(75)
+      await delay(600)
+      
+      addLine(`> Synthesizing ${company} debate arguments...`)
+      setProgress(80)
       await delay(500)
       
       let debateResult = null
       try {
         debateResult = await generateDebate(harvestedData)
-        addLine(PIPELINE_STEPS[10].text, 'green')
+        const debateLength = debateResult.script?.length || 0
+        addLine('> [SUCCESS] AI debate script ready', 'green')
+        setProgress(85)
+        addLine(`> Generated ${debateLength} debate exchanges`)
         setPipelineData(prev => ({ ...prev, debateScript: debateResult.script }))
+        setStats(prev => ({ ...prev, debateLines: debateLength }))
       } catch (err) {
         console.error('Debate generation error:', err)
-        // Use fallback transcript
         debateResult = { script: getFallbackDebateScript(ticker) }
-        addLine(`> [FALLBACK] Using pre-generated debate`, 'yellow')
+        const debateLength = debateResult.script.length
+        addLine(`> [FALLBACK] Using pre-generated debate for ${ticker}`, 'yellow')
+        setProgress(85)
         setPipelineData(prev => ({ ...prev, debateScript: debateResult.script }))
+        setStats(prev => ({ ...prev, debateLines: debateLength }))
       }
+      setProgress(90)
       setCurrentStep(11)
       await delay(300)
 
       // Step 9: Complete
-      addLine(PIPELINE_STEPS[11].text, 'green')
+      addLine(`> [COMPLETE] ${ticker} analysis ready`, 'green')
+      setProgress(95)
       await delay(500)
-      addLine(PIPELINE_STEPS[12].text, 'purple')
+      
+      addLine(`> LAUNCHING ${ticker} DASHBOARD...`, 'purple')
+      setProgress(100)
       setCurrentStep(13)
       setIsComplete(true)
 
@@ -155,13 +187,14 @@ export default function Terminal() {
 
       // Navigate to dashboard
       await delay(800)
-      navigate(`/dashboard?ticker=${ticker}&company=${encodeURIComponent(company)}`)
+      navigate(`/dashboard/${ticker}?company=${encodeURIComponent(company)}`)
 
     } catch (err) {
       console.error('Pipeline error:', err)
       setError(err.message)
       addLine(`> [ERROR] ${err.message}`, 'red')
-      addLine(`> Retrying with fallback data...`, 'yellow')
+      addLine(`> Retrying with fallback data for ${ticker}...`, 'yellow')
+      setProgress(100)
       
       // Try to continue with fallback
       setTimeout(() => {
@@ -175,7 +208,7 @@ export default function Terminal() {
           timestamp: Date.now(),
           useFallback: true,
         }))
-        navigate(`/dashboard?ticker=${ticker}&company=${encodeURIComponent(company)}`)
+        navigate(`/dashboard/${ticker}?company=${encodeURIComponent(company)}`)
       }, 2000)
     }
   }, [ticker, company, year, addLine, navigate])
@@ -203,11 +236,9 @@ export default function Terminal() {
     }
   }
 
-  const progress = (currentStep / PIPELINE_STEPS.length) * 100
-
   return (
     <motion.div 
-      className="min-h-screen flex items-center justify-center px-4 py-8"
+      className="min-h-screen flex items-center justify-center px-4 py-8 bg-[#0A0A0A]"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, scale: 1.02 }}
@@ -323,8 +354,8 @@ export default function Terminal() {
 {`   ______  __  __  ____    __  __  ____  ____ 
   / ____/ / / / / / __ \\  / / / / / __/ / __ \\
  / /     / /_/ / / /_/ / / /_/ / / _/  / /_/ /
-/_/      \\__, / / .___/ / __  / /___/ / _  _/ 
-        /____/ /_/     /_/ /_/ /____/ /_/ |_|  v2.1`}
+/_/____  \\__, / / .___/ / __  / /___/ / _  _/ 
+\ ______\/____/ /_/     /_/ /_/ /____/ /_/ |_|  v3.0`}
               </pre>
               
               {displayedLines.map((line, index) => (
@@ -367,7 +398,7 @@ export default function Terminal() {
                     >
                       <Database size={20} className="text-purple-400" />
                     </motion.div>
-                    <span className="text-purple-400 font-semibold">Launching Dashboard...</span>
+                    <span className="text-purple-400 font-semibold">Launching {ticker} Dashboard...</span>
                   </div>
                 </motion.div>
               )}
@@ -402,11 +433,11 @@ export default function Terminal() {
                 <div className="flex items-center gap-4 text-xs">
                   <div className="flex items-center gap-2 text-gray-500">
                     <FileSearch size={12} />
-                    <span>Sources: {pipelineData.harvestedData ? '1' : '0'}</span>
+                    <span>Documents: {stats.documents}</span>
                   </div>
                   <div className="flex items-center gap-2 text-gray-500">
                     <Database size={12} />
-                    <span>Debate Lines: {pipelineData.debateScript?.length || 0}</span>
+                    <span>Debate Lines: {stats.debateLines}</span>
                   </div>
                 </div>
                 <div className="text-xs text-gray-400 font-mono">
@@ -427,7 +458,7 @@ export default function Terminal() {
                   <span className="text-xs text-gray-400">AI Engine Active</span>
                 </motion.div>
                 <span className="text-xs text-gray-600">|</span>
-                <span className="text-xs text-gray-500">Model: Claude 3.5</span>
+                <span className="text-xs text-gray-500">Model: Claude Sonnet 4</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-purple-400 font-mono">${ticker}</span>
@@ -442,7 +473,10 @@ export default function Terminal() {
           animate={{ opacity: 1 }}
           transition={{ delay: 1 }}
         >
-          {isComplete ? 'Analysis complete! Redirecting...' : 'Synthesizing institutional analysis and generating insights...'}
+          {isComplete 
+            ? `${ticker} analysis complete! Redirecting...` 
+            : `Synthesizing institutional analysis for ${company}...`
+          }
         </motion.p>
       </motion.div>
     </motion.div>

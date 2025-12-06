@@ -1,10 +1,12 @@
 import { useParams, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Zap, TrendingUp, TrendingDown, Sparkles, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Zap, TrendingUp, TrendingDown, Sparkles, AlertCircle, Download } from 'lucide-react'
 import SourceDocuments from '../components/SourceDocuments'
 import PodcastPlayer from '../components/PodcastPlayer'
 import KeyInsights from '../components/KeyInsights'
 import StockChart from '../components/StockChart'
+import AnalysisReport from '../components/AnalysisReport'
+import AnalysisReportViewer from '../components/AnalysisReportViewer'
 import { getSourceDocuments, getKeyInsights, getTranscript } from '../utils/analyzeRequest'
 import { useAnalysisData } from '../hooks/useAnalysis'
 
@@ -118,59 +120,43 @@ export default function Dashboard() {
             <Zap size={14} className="text-purple-400" />
             <span className="text-xs">Analysis Complete</span>
           </div>
+          
+          {/* Download Analysis Report Button */}
+          {analysisData?.analysisReport && analysisData?.sessionId && (
+            <motion.button
+              onClick={() => {
+                const url = `http://localhost:3001/api/analysis/download-pdf?sessionId=${analysisData.sessionId}&ticker=${ticker}`;
+                window.open(url, '_blank');
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-full transition-all"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <Download size={14} className="text-purple-400" />
+              <span className="text-xs text-purple-400 font-medium">Download Report</span>
+            </motion.button>
+          )}
         </div>
       </motion.header>
 
-      {/* Summary Banner (if API data available) */}
-      {analysisData?.summary && (
-        <motion.div 
-          className="mb-4 p-4 bg-white/[0.02] border border-white/[0.06] rounded-xl"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <p className="text-sm text-gray-300 leading-relaxed">{analysisData.summary}</p>
-        </motion.div>
-      )}
-
-      {/* Bull/Bear Quick View (if API data available) */}
-      {analysisData?.bullCase && analysisData?.bearCase && (
-        <motion.div 
-          className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-        >
-          {/* Bull Case */}
-          <div className="p-4 bg-white/[0.02] border border-white/[0.06] border-l-2 border-l-green-500 rounded-xl">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
-              <span className="text-sm font-semibold text-green-400">Bull Case</span>
-            </div>
-            <p className="text-xs text-gray-400 leading-relaxed">{analysisData.bullCase.argument}</p>
-          </div>
-          
-          {/* Bear Case */}
-          <div className="p-4 bg-white/[0.02] border border-white/[0.06] border-l-2 border-l-red-500 rounded-xl">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
-              <span className="text-sm font-semibold text-red-400">Bear Case</span>
-            </div>
-            <p className="text-xs text-gray-400 leading-relaxed">{analysisData.bearCase.argument}</p>
-          </div>
-        </motion.div>
-      )}
-
       {/* 3-Column Bento Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-[calc(100vh-200px)]">
-        {/* Column 1: The Vault (Source Documents) - 3 cols */}
+        {/* Column 1: The Vault (Source Documents) + Analysis Report - 3 cols */}
         <motion.div 
-          className="lg:col-span-3 bento-card flex flex-col overflow-hidden"
+          className="lg:col-span-3 flex flex-col gap-4 overflow-hidden"
           initial={{ x: -30, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           transition={{ delay: 0.1, duration: 0.5 }}
         >
-          <SourceDocuments documents={documents} ticker={ticker} />
+          {/* Source Documents - Takes 60% height */}
+          <div className="bento-card flex-[3] min-h-0 overflow-hidden">
+            <SourceDocuments documents={documents} ticker={ticker} />
+          </div>
+          
+          {/* Analysis Report - Takes 40% height */}
+          <div className="bento-card flex-[2] min-h-0 overflow-hidden">
+            <AnalysisReportViewer analysisData={analysisData} ticker={ticker} />
+          </div>
         </motion.div>
 
         {/* Column 2: The Broadcast (Live Debate) - 5 cols */}

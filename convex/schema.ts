@@ -20,6 +20,7 @@ export default defineSchema({
       v.literal("searching_pdf"),
       v.literal("harvesting"),
       v.literal("generating_debate"),
+      v.literal("generating_report"),
       v.literal("synthesizing_audio"),
       v.literal("complete"),
       v.literal("error")
@@ -68,6 +69,19 @@ export default defineSchema({
     // Audio output
     audioUrl: v.optional(v.string()),
     audioDuration: v.optional(v.number()),
+    
+    // Analysis report
+    analysisReport: v.optional(v.object({
+      summary: v.string(),
+      financialAnalysis: v.string(),
+      keyStrengths: v.array(v.string()),
+      keyRisks: v.array(v.string()),
+      marketOutlook: v.string(),
+      recommendation: v.optional(v.string()),
+      generatedAt: v.number(),
+      company: v.string(),
+      ticker: v.string(),
+    })),
     
     // Timestamps
     createdAt: v.number(),

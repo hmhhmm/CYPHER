@@ -248,6 +248,43 @@ export async function generateDebate(harvestedData, sessionId) {
 }
 
 /**
+ * Generate comprehensive analysis report from harvested data
+ * @param {HarvestedData} harvestedData - The harvested financial data
+ * @param {string} sessionId - Session ID for Convex tracking
+ * @param {string} company - Company name
+ * @param {string} ticker - Stock ticker
+ * @returns {Promise<{report: object, meta: object}>}
+ */
+export async function generateAnalysisReport(harvestedData, sessionId, company, ticker) {
+  console.log('[API] generateAnalysisReport called:', { 
+    sessionId,
+    hasHarvestedData: !!harvestedData,
+    company,
+    ticker,
+  });
+  try {
+    const result = await fetchAPI('/api/analysis/generate-report', {
+      method: 'POST',
+      body: JSON.stringify({ 
+        harvestedData, 
+        sessionId, 
+        company,
+        ticker,
+      }),
+    });
+    console.log('[API] generateAnalysisReport result:', { 
+      hasReport: !!result.report,
+      strengths: result.report?.keyStrengths?.length || 0,
+      risks: result.report?.keyRisks?.length || 0,
+    });
+    return result;
+  } catch (error) {
+    console.error('[API] generateAnalysisReport FAILED:', error);
+    throw error;
+  }
+}
+
+/**
  * Synthesize audio from debate script
  * @param {array} debateScript - Array of debate lines
  * @param {string} sessionId - Session ID for Convex tracking
@@ -390,6 +427,24 @@ export async function runAnalysisPipeline(query, onStatusChange = () => {}) {
       note: 'Debate includes context from annual report and recent news',
     });
     
+    // Step 4.5: Generate analysis report
+    console.log('[Pipeline] Step 4.5: Generating comprehensive analysis report...');
+    onStatusChange('generating_report', 'Generating comprehensive analysis report...');
+    let analysisReport = null;
+    try {
+      // Get source documents from the analysis session
+      const reportResult = await generateAnalysisReport(harvestedData, sessionId, intent.company, intent.ticker);
+      analysisReport = reportResult.report;
+      console.log('[Pipeline] Step 4.5 complete:', {
+        hasReport: !!analysisReport,
+        strengths: analysisReport?.keyStrengths?.length || 0,
+        risks: analysisReport?.keyRisks?.length || 0,
+      });
+    } catch (reportError) {
+      console.warn('[Pipeline] Step 4.5: Analysis report generation skipped:', reportError.message);
+      // Continue without report - not critical
+    }
+    
     // Step 5: Synthesize audio (optional - skip if no API key)
     console.log('[Pipeline] Step 5: Synthesizing audio...');
     onStatusChange('synthesizing_audio', 'Creating audio podcast...');
@@ -425,6 +480,7 @@ export async function runAnalysisPipeline(query, onStatusChange = () => {}) {
       company: intent.company,
       harvestedData,
       debateScript: debateResult.script,
+      analysisReport: analysisReport,
       audioUrl: audioResult?.audioUrl || null,
       meta: debateResult.meta,
     };
@@ -492,6 +548,7 @@ export default {
   searchPDF,
   harvestPDF,
   generateDebate,
+  generateAnalysisReport,
   synthesizeAudio,
   synthesizeLine,
   getVoices,

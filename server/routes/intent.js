@@ -59,12 +59,17 @@ router.post('/extract', async (req, res, next) => {
 User Query: "${text}"
 
 Extract and return a JSON object with these fields:
-- company: The company name (or null if not mentioned)
-- ticker: The stock ticker symbol in uppercase (or null if not mentioned)
+- company: The FULL canonical company name (e.g., "Tesla Inc." not just "Tesla", "Apple Inc." not just "Apple"). Use the official company name as it appears in SEC filings. If not mentioned, return null.
+- ticker: The stock ticker symbol in uppercase (e.g., "TSLA", "AAPL"). If not mentioned, return null.
 - year: The year being asked about (or null, default to current year if asking about recent/latest)
 - request: A brief description of what the user wants to know
 
-Common mappings:
+IMPORTANT:
+- Always return the FULL official company name, not abbreviations or short names
+- Include legal suffixes like "Inc.", "Corporation", "Corp.", "LLC" when known
+- Use canonical names as they appear in SEC filings
+
+Common mappings (use FULL names):
 - Tesla, TSLA -> Tesla Inc.
 - Apple, AAPL -> Apple Inc.
 - Microsoft, MSFT -> Microsoft Corporation

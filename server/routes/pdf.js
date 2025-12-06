@@ -44,7 +44,20 @@ router.get('/search', async (req, res) => {
 
     console.log(`[PDF Search] ${ticker} ${year} ${reportType}`);
 
-    const searchResults = await searchSECFilings(ticker, year, reportType);
+    // Get company name from analysis session if available
+    let company = null;
+    if (sessionId && convex) {
+      try {
+        const analysis = await convex.query(api.analyses.getBySession, { sessionId });
+        if (analysis && analysis.company) {
+          company = analysis.company;
+        }
+      } catch (err) {
+        // Continue without company name
+      }
+    }
+
+    const searchResults = await searchSECFilings(ticker, year, reportType, company);
 
     // Fetch news articles to include as source documents
     let newsArticles = [];
@@ -88,14 +101,36 @@ router.get('/search', async (req, res) => {
       })),
     ];
 
+    // Deduplicate by URL (keep first occurrence)
+    const uniqueSourceDocuments = sourceDocuments.filter((doc, index, self) =>
+      index === self.findIndex(d => d.url === doc.url && d.url !== '')
+    );
+
     // Save combined source documents to Convex if sessionId provided
-    if (convex && sessionId && sourceDocuments.length > 0) {
+    if (convex && sessionId && uniqueSourceDocuments.length > 0) {
       try {
+        // Get existing sourceDocuments to merge and deduplicate
+        let existingDocs = [];
+        try {
+          const analysis = await convex.query(api.analyses.getBySession, { sessionId });
+          if (analysis && analysis.sourceDocuments) {
+            existingDocs = analysis.sourceDocuments;
+          }
+        } catch (err) {
+          // Continue without existing docs
+        }
+        
+        // Merge existing and new documents, then deduplicate by URL
+        const mergedDocs = [...existingDocs, ...uniqueSourceDocuments];
+        const finalDocs = mergedDocs.filter((doc, index, self) =>
+          index === self.findIndex(d => d.url === doc.url && d.url !== '')
+        );
+        
         await convex.mutation(api.analyses.storeSourceDocuments, {
           sessionId,
-          sourceDocuments: sourceDocuments,
+          sourceDocuments: finalDocs,
         });
-        console.log(`[PDF Search] Saved ${sourceDocuments.length} source documents (${searchResults.results?.length || 0} PDFs + ${newsArticles.length} news) to Convex`);
+        console.log(`[PDF Search] Saved ${finalDocs.length} unique source documents (merged ${existingDocs.length} existing + ${uniqueSourceDocuments.length} new)`);
       } catch (convexError) {
         console.error('[PDF Search] Failed to save source documents:', convexError);
         // Continue even if save fails
@@ -362,7 +397,7 @@ router.post('/analyze-complete', async (req, res) => {
 
     // Step 1: Search for SEC filing
     console.log(`[Complete Analysis] Step 1: Searching SEC filings...`);
-    const searchResults = await searchSECFilings(ticker, year, reportType);
+    const searchResults = await searchSECFilings(ticker, year, reportType, company);
 
     if (!searchResults.pdfUrl) {
       return res.status(404).json({
@@ -482,14 +517,36 @@ router.post('/analyze-complete', async (req, res) => {
       })),
     ];
 
+    // Deduplicate by URL (keep first occurrence)
+    const uniqueSourceDocuments = sourceDocuments.filter((doc, index, self) =>
+      index === self.findIndex(d => d.url === doc.url && d.url !== '')
+    );
+
     // Save combined sourceDocuments to Convex
-    if (sourceDocuments.length > 0) {
+    if (uniqueSourceDocuments.length > 0) {
       try {
+        // Get existing sourceDocuments to merge and deduplicate
+        let existingDocs = [];
+        try {
+          const analysis = await convex.query(api.analyses.getBySession, { sessionId });
+          if (analysis && analysis.sourceDocuments) {
+            existingDocs = analysis.sourceDocuments;
+          }
+        } catch (err) {
+          // Continue without existing docs
+        }
+        
+        // Merge existing and new documents, then deduplicate by URL
+        const mergedDocs = [...existingDocs, ...uniqueSourceDocuments];
+        const finalDocs = mergedDocs.filter((doc, index, self) =>
+          index === self.findIndex(d => d.url === doc.url && d.url !== '')
+        );
+        
         await convex.mutation(api.analyses.storeSourceDocuments, {
           sessionId,
-          sourceDocuments: sourceDocuments,
+          sourceDocuments: finalDocs,
         });
-        console.log(`[Complete Analysis] Saved ${sourceDocuments.length} source documents (${searchResults.results?.length || 0} PDFs + ${newsArticles.length} news)`);
+        console.log(`[Complete Analysis] Saved ${finalDocs.length} unique source documents (merged ${existingDocs.length} existing + ${uniqueSourceDocuments.length} new)`);
       } catch (convexError) {
         console.error('[Complete Analysis] Failed to save source documents:', convexError);
         // Continue even if save fails
