@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
@@ -9,7 +9,19 @@ import {
   RefreshCw,
   Maximize2,
   X,
-  Activity
+  Activity,
+  Crosshair,
+  Target,
+  Bell,
+  Minus,
+  Plus,
+  LineChart,
+  CandlestickChart as CandleIcon,
+  AreaChart,
+  Trash2,
+  DollarSign,
+  ShoppingCart,
+  Tag
 } from 'lucide-react'
 
 // Known valid TradingView symbols (common US stocks)
@@ -25,26 +37,57 @@ const VALID_SYMBOLS = new Set([
   'SNOW', 'PLTR', 'COIN', 'SQ', 'UBER', 'LYFT', 'ABNB', 'RBLX', 'HOOD', 'RIVN', 'LCID'
 ])
 
-// Generate realistic candlestick data
-function generateCandlestickData(basePrice = 150, count = 30) {
+// Time period configurations
+const TIME_PERIODS = {
+  '1D': { count: 24, label: '1 Day', interval: 'hourly' },
+  '1W': { count: 7, label: '1 Week', interval: 'daily' },
+  '1M': { count: 30, label: '1 Month', interval: 'daily' },
+  '3M': { count: 90, label: '3 Months', interval: 'daily' },
+  '6M': { count: 180, label: '6 Months', interval: 'daily' },
+  '1Y': { count: 365, label: '1 Year', interval: 'daily' },
+  'ALL': { count: 730, label: 'All Time', interval: 'weekly' },
+}
+
+// Generate realistic candlestick data with dates
+function generateCandlestickData(basePrice = 150, count = 30, period = '1M') {
   const data = []
   let currentPrice = basePrice
+  const now = new Date()
   
-  for (let i = 0; i < count; i++) {
-    const volatility = currentPrice * 0.03 // 3% volatility
-    const change = (Math.random() - 0.48) * volatility // Slight bullish bias
+  // Adjust volatility based on period
+  const volatilityMap = {
+    '1D': 0.008, '1W': 0.015, '1M': 0.025, 
+    '3M': 0.03, '6M': 0.035, '1Y': 0.04, 'ALL': 0.05
+  }
+  const baseVolatility = volatilityMap[period] || 0.03
+  
+  for (let i = count - 1; i >= 0; i--) {
+    const volatility = currentPrice * baseVolatility
+    const trend = Math.sin(i / 10) * 0.3 // Add wave pattern
+    const change = (Math.random() - 0.45 + trend * 0.1) * volatility
     
     const open = currentPrice
     const close = currentPrice + change
-    const high = Math.max(open, close) + Math.random() * volatility * 0.5
-    const low = Math.min(open, close) - Math.random() * volatility * 0.5
+    const high = Math.max(open, close) + Math.random() * volatility * 0.6
+    const low = Math.min(open, close) - Math.random() * volatility * 0.6
+    
+    // Calculate date based on period
+    const date = new Date(now)
+    if (period === '1D') {
+      date.setHours(date.getHours() - i)
+    } else if (period === 'ALL') {
+      date.setDate(date.getDate() - i * 7)
+    } else {
+      date.setDate(date.getDate() - i)
+    }
     
     data.push({
-      open: open,
-      high: high,
-      low: low,
-      close: close,
-      volume: Math.floor(Math.random() * 1000000) + 500000,
+      date,
+      open,
+      high,
+      low,
+      close,
+      volume: Math.floor(Math.random() * 2000000) + 500000,
       bullish: close >= open
     })
     
@@ -52,6 +95,24 @@ function generateCandlestickData(basePrice = 150, count = 30) {
   }
   
   return data
+}
+
+// Format date based on period
+function formatDate(date, period) {
+  if (period === '1D') {
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  } else if (period === '1W' || period === '1M') {
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  } else {
+    return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+  }
+}
+
+// Format number with K/M suffix
+function formatVolume(num) {
+  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
+  if (num >= 1000) return (num / 1000).toFixed(0) + 'K'
+  return num.toString()
 }
 
 export default function StockChart({ ticker }) {
@@ -225,7 +286,7 @@ function ChartModal({ ticker, onClose }) {
     >
       {/* Backdrop */}
       <motion.div 
-        className="absolute inset-0 bg-black/90 backdrop-blur-md"
+        className="absolute inset-0 bg-black/95 backdrop-blur-md"
         onClick={onClose}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -234,7 +295,7 @@ function ChartModal({ ticker, onClose }) {
       
       {/* Modal Content */}
       <motion.div 
-        className="relative w-full max-w-6xl h-[85vh] bg-[#0d0d0d] border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
+        className="relative w-full max-w-7xl h-[90vh] bg-[#0a0a0a] border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
         initial={{ scale: 0.9, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.9, opacity: 0, y: 20 }}
@@ -244,33 +305,24 @@ function ChartModal({ ticker, onClose }) {
         <div className="absolute -inset-1 bg-gradient-to-r from-purple-500/20 via-transparent to-green-500/20 blur-xl pointer-events-none" />
         
         {/* Header */}
-        <div className="relative flex items-center justify-between px-6 py-4 border-b border-white/10 bg-black/50">
+        <div className="relative flex items-center justify-between px-6 py-3 border-b border-white/10 bg-black/50">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <Activity size={20} className="text-purple-400" />
               <h2 className="text-xl font-bold text-white">${ticker}</h2>
             </div>
             <div className="h-6 w-px bg-white/20" />
-            <span className="text-sm text-gray-400">Candlestick Chart</span>
+            <span className="text-sm text-gray-400">Interactive Chart</span>
+            <div className="flex items-center gap-2 px-2 py-1 bg-green-500/10 rounded text-xs text-green-400">
+              <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+              LIVE
+            </div>
           </div>
           
-          <div className="flex items-center gap-4">
-            {/* Time intervals */}
-            <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
-              {['1D', '1W', '1M', '3M', '1Y'].map((interval) => (
-                <button 
-                  key={interval}
-                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                    interval === '1M' 
-                      ? 'bg-purple-500/30 text-purple-300' 
-                      : 'text-gray-500 hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  {interval}
-                </button>
-              ))}
+          <div className="flex items-center gap-3">
+            <div className="text-xs text-gray-500">
+              Hover to see OHLC • Click periods to change timeframe
             </div>
-            
             <motion.button
               onClick={onClose}
               className="p-2 rounded-lg bg-white/5 hover:bg-red-500/20 text-gray-400 hover:text-red-400 transition-all"
@@ -283,7 +335,7 @@ function ChartModal({ ticker, onClose }) {
         </div>
         
         {/* Chart Area */}
-        <div className="relative h-[calc(100%-70px)] p-4">
+        <div className="relative h-[calc(100%-56px)]">
           <CandlestickChart ticker={ticker} expanded />
         </div>
       </motion.div>
@@ -291,23 +343,59 @@ function ChartModal({ ticker, onClose }) {
   )
 }
 
-// Professional Candlestick Chart Component
+// Professional Trading Chart Component - Like Real Trading Platforms
 function CandlestickChart({ ticker, compact = false, expanded = false }) {
-  const [candleData] = useState(() => generateCandlestickData(150, expanded ? 50 : 25))
+  const [selectedPeriod, setSelectedPeriod] = useState('1M')
+  const [chartType, setChartType] = useState('candle') // candle, line, area
+  const [hoveredCandle, setHoveredCandle] = useState(null)
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
+  const [showCrosshair, setShowCrosshair] = useState(false)
+  const [priceLines, setPriceLines] = useState([]) // User-drawn lines
+  const [orders, setOrders] = useState([]) // Limit orders
+  const [alerts, setAlerts] = useState([]) // Price alerts
+  const [drawMode, setDrawMode] = useState(null) // 'line', 'order', 'alert'
+  const [showOrderPanel, setShowOrderPanel] = useState(false)
+  const [orderType, setOrderType] = useState('limit') // 'limit', 'stop'
+  const [orderSide, setOrderSide] = useState('buy') // 'buy', 'sell'
+  const [zoomLevel, setZoomLevel] = useState(1)
+  const chartRef = useRef(null)
+  
+  const periodConfig = TIME_PERIODS[selectedPeriod]
+  const baseCount = compact ? 20 : expanded ? 60 : 35
+  const displayCount = Math.min(periodConfig.count, Math.floor(baseCount * zoomLevel))
+  
+  const [candleData, setCandleData] = useState(() => 
+    generateCandlestickData(150, displayCount, selectedPeriod)
+  )
+  
+  // Regenerate data when period or zoom changes
+  useEffect(() => {
+    setCandleData(generateCandlestickData(150, displayCount, selectedPeriod))
+  }, [selectedPeriod, displayCount])
   
   const allPrices = candleData.flatMap(d => [d.high, d.low])
   const maxPrice = Math.max(...allPrices)
   const minPrice = Math.min(...allPrices)
   const priceRange = maxPrice - minPrice
-  const padding = priceRange * 0.1
+  const padding = priceRange * 0.12
   
-  const chartHeight = expanded ? 500 : 180
-  const chartWidth = expanded ? 900 : 380
-  const candleWidth = expanded ? 12 : 10
-  const candleGap = expanded ? 6 : 5
+  const chartHeight = expanded ? 480 : compact ? 140 : 180
+  const chartWidth = expanded ? 1100 : compact ? 350 : 400
+  const candleWidth = Math.max(4, (expanded ? 12 : compact ? 10 : 10) / zoomLevel)
+  const candleGap = Math.max(2, (expanded ? 5 : compact ? 4 : 4) / zoomLevel)
+  const leftPadding = expanded ? 55 : 35
+  const rightPadding = expanded ? 70 : 55
   
-  const scaleY = (price) => {
+  const scaleY = useCallback((price) => {
     return chartHeight - ((price - minPrice + padding) / (priceRange + padding * 2)) * chartHeight
+  }, [chartHeight, minPrice, padding, priceRange])
+  
+  const scaleYInverse = useCallback((y) => {
+    return minPrice + padding + (1 - y / chartHeight) * (priceRange + padding * 2)
+  }, [chartHeight, minPrice, padding, priceRange])
+  
+  const scaleX = (index) => {
+    return leftPadding + index * (candleWidth + candleGap)
   }
   
   const lastCandle = candleData[candleData.length - 1]
@@ -316,196 +404,471 @@ function CandlestickChart({ ticker, compact = false, expanded = false }) {
   const isPositive = priceChange >= 0
 
   // Generate price levels for grid
-  const priceStep = priceRange / 5
-  const priceLevels = Array.from({ length: 6 }, (_, i) => minPrice + i * priceStep)
+  const priceStep = priceRange / 6
+  const priceLevels = Array.from({ length: 7 }, (_, i) => minPrice + i * priceStep)
+  
+  // Handle mouse move for crosshair
+  const handleMouseMove = (e) => {
+    if (!chartRef.current) return
+    
+    const rect = chartRef.current.getBoundingClientRect()
+    const svgX = ((e.clientX - rect.left) / rect.width) * chartWidth
+    const svgY = ((e.clientY - rect.top) / rect.height) * chartHeight
+    
+    setMousePos({ x: svgX, y: svgY })
+    
+    const candleIndex = Math.floor((svgX - leftPadding) / (candleWidth + candleGap))
+    if (candleIndex >= 0 && candleIndex < candleData.length) {
+      setHoveredCandle(candleIndex)
+    } else {
+      setHoveredCandle(null)
+    }
+  }
+  
+  // Handle click for drawing tools
+  const handleChartClick = (e) => {
+    if (!chartRef.current || compact) return
+    
+    const rect = chartRef.current.getBoundingClientRect()
+    const svgY = ((e.clientY - rect.top) / rect.height) * chartHeight
+    const price = scaleYInverse(svgY)
+    
+    if (drawMode === 'line') {
+      setPriceLines([...priceLines, { price, color: '#8b5cf6', id: Date.now() }])
+      setDrawMode(null)
+    } else if (drawMode === 'alert') {
+      setAlerts([...alerts, { price, id: Date.now() }])
+      setDrawMode(null)
+    } else if (drawMode === 'order') {
+      setOrders([...orders, { 
+        price, 
+        type: orderType, 
+        side: orderSide, 
+        id: Date.now(),
+        quantity: 100
+      }])
+      setDrawMode(null)
+    }
+  }
+  
+  const removePriceLine = (id) => {
+    setPriceLines(priceLines.filter(l => l.id !== id))
+  }
+  
+  const removeOrder = (id) => {
+    setOrders(orders.filter(o => o.id !== id))
+  }
+  
+  const removeAlert = (id) => {
+    setAlerts(alerts.filter(a => a.id !== id))
+  }
+  
+  const hoveredData = hoveredCandle !== null ? candleData[hoveredCandle] : null
+  const currentPrice = hoveredData?.close || lastCandle.close
 
   return (
-    <div className={`w-full h-full flex flex-col ${expanded ? 'p-2' : ''}`}>
-      {/* Chart Header */}
-      <div className={`flex items-center justify-between ${compact ? 'mb-2 px-2' : 'mb-4'}`}>
-        <div className="flex items-center gap-3">
-          <div>
+    <div className={`w-full h-full flex flex-col bg-[#080808] ${expanded ? '' : ''}`}>
+      {/* Top Toolbar */}
+      {!compact && (
+        <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 bg-[#0c0c0c]">
+          {/* Left: Symbol & Price */}
+          <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <span className={`font-bold text-white ${expanded ? 'text-2xl' : 'text-base'}`}>
-                ${ticker}
+              <span className={`font-bold text-white ${expanded ? 'text-xl' : 'text-base'}`}>
+                {ticker}
               </span>
-              <span className={`font-mono ${expanded ? 'text-xl' : 'text-sm'} ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                ${lastCandle.close.toFixed(2)}
+              <span className={`font-mono ${expanded ? 'text-lg' : 'text-sm'} ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                ${currentPrice.toFixed(2)}
+              </span>
+              <span className={`text-xs px-1.5 py-0.5 rounded ${isPositive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                {isPositive ? '+' : ''}{priceChange.toFixed(2)}%
               </span>
             </div>
-            {!compact && (
-              <p className="text-xs text-gray-500 mt-0.5">Daily • Last 30 Sessions</p>
+            
+            {/* OHLC Data */}
+            {hoveredData && expanded && (
+              <div className="flex items-center gap-3 text-xs border-l border-white/10 pl-4 ml-2">
+                <span className="text-gray-500">O <span className="text-white">{hoveredData.open.toFixed(2)}</span></span>
+                <span className="text-gray-500">H <span className="text-green-400">{hoveredData.high.toFixed(2)}</span></span>
+                <span className="text-gray-500">L <span className="text-red-400">{hoveredData.low.toFixed(2)}</span></span>
+                <span className="text-gray-500">C <span className={hoveredData.bullish ? 'text-green-400' : 'text-red-400'}>{hoveredData.close.toFixed(2)}</span></span>
+                <span className="text-gray-500">V <span className="text-purple-400">{formatVolume(hoveredData.volume)}</span></span>
+              </div>
             )}
           </div>
+          
+          {/* Right: Tools & Controls */}
+          <div className="flex items-center gap-2">
+            {/* Chart Type */}
+            <div className="flex items-center bg-white/5 rounded-lg p-0.5">
+              {[
+                { type: 'candle', icon: CandleIcon, label: 'Candle' },
+                { type: 'line', icon: LineChart, label: 'Line' },
+                { type: 'area', icon: AreaChart, label: 'Area' }
+              ].map(({ type, icon: Icon, label }) => (
+                <button
+                  key={type}
+                  onClick={() => setChartType(type)}
+                  className={`p-1.5 rounded transition-all ${chartType === type ? 'bg-purple-500/30 text-purple-300' : 'text-gray-500 hover:text-white'}`}
+                  title={label}
+                >
+                  <Icon size={14} />
+                </button>
+              ))}
+            </div>
+            
+            {/* Drawing Tools */}
+            {expanded && (
+              <div className="flex items-center bg-white/5 rounded-lg p-0.5">
+                <button
+                  onClick={() => setDrawMode(drawMode === 'line' ? null : 'line')}
+                  className={`p-1.5 rounded transition-all ${drawMode === 'line' ? 'bg-purple-500/30 text-purple-300' : 'text-gray-500 hover:text-white'}`}
+                  title="Draw Price Line"
+                >
+                  <Minus size={14} />
+                </button>
+                <button
+                  onClick={() => setDrawMode(drawMode === 'alert' ? null : 'alert')}
+                  className={`p-1.5 rounded transition-all ${drawMode === 'alert' ? 'bg-yellow-500/30 text-yellow-300' : 'text-gray-500 hover:text-white'}`}
+                  title="Set Price Alert"
+                >
+                  <Bell size={14} />
+                </button>
+                <button
+                  onClick={() => { setDrawMode(drawMode === 'order' ? null : 'order'); setShowOrderPanel(true) }}
+                  className={`p-1.5 rounded transition-all ${drawMode === 'order' ? 'bg-blue-500/30 text-blue-300' : 'text-gray-500 hover:text-white'}`}
+                  title="Place Order"
+                >
+                  <Target size={14} />
+                </button>
+                {(priceLines.length > 0 || orders.length > 0 || alerts.length > 0) && (
+                  <button
+                    onClick={() => { setPriceLines([]); setOrders([]); setAlerts([]) }}
+                    className="p-1.5 rounded text-gray-500 hover:text-red-400 transition-all"
+                    title="Clear All"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+            )}
+            
+            {/* Zoom Controls */}
+            <div className="flex items-center bg-white/5 rounded-lg p-0.5">
+              <button
+                onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.25))}
+                className="p-1.5 rounded text-gray-500 hover:text-white transition-all"
+              >
+                <Minus size={14} />
+              </button>
+              <span className="text-xs text-gray-400 px-1 min-w-[40px] text-center">{Math.round(zoomLevel * 100)}%</span>
+              <button
+                onClick={() => setZoomLevel(Math.min(3, zoomLevel + 0.25))}
+                className="p-1.5 rounded text-gray-500 hover:text-white transition-all"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+            
+            {/* Time Period */}
+            <div className="flex items-center bg-white/5 rounded-lg p-0.5">
+              {Object.keys(TIME_PERIODS).map((period) => (
+                <button 
+                  key={period}
+                  onClick={() => setSelectedPeriod(period)}
+                  className={`px-2 py-1 text-xs font-medium rounded transition-all ${
+                    selectedPeriod === period 
+                      ? 'bg-purple-500/40 text-purple-300' 
+                      : 'text-gray-500 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  {period}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
-        
-        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${isPositive ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
-          {isPositive ? (
-            <TrendingUp size={compact ? 14 : 16} className="text-green-400" />
-          ) : (
-            <TrendingDown size={compact ? 14 : 16} className="text-red-400" />
-          )}
-          <span className={`font-bold ${isPositive ? 'text-green-400' : 'text-red-400'} ${compact ? 'text-sm' : 'text-base'}`}>
-            {isPositive ? '+' : ''}{priceChange.toFixed(2)}%
+      )}
+      
+      {/* Order Panel */}
+      {showOrderPanel && drawMode === 'order' && expanded && (
+        <motion.div 
+          className="flex items-center gap-3 px-3 py-2 bg-[#0f0f0f] border-b border-white/5"
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+        >
+          <span className="text-xs text-gray-400">Order Type:</span>
+          <div className="flex items-center bg-white/5 rounded p-0.5">
+            <button
+              onClick={() => setOrderSide('buy')}
+              className={`px-3 py-1 text-xs rounded ${orderSide === 'buy' ? 'bg-green-500/30 text-green-400' : 'text-gray-500'}`}
+            >
+              BUY
+            </button>
+            <button
+              onClick={() => setOrderSide('sell')}
+              className={`px-3 py-1 text-xs rounded ${orderSide === 'sell' ? 'bg-red-500/30 text-red-400' : 'text-gray-500'}`}
+            >
+              SELL
+            </button>
+          </div>
+          <div className="flex items-center bg-white/5 rounded p-0.5">
+            <button
+              onClick={() => setOrderType('limit')}
+              className={`px-3 py-1 text-xs rounded ${orderType === 'limit' ? 'bg-blue-500/30 text-blue-400' : 'text-gray-500'}`}
+            >
+              LIMIT
+            </button>
+            <button
+              onClick={() => setOrderType('stop')}
+              className={`px-3 py-1 text-xs rounded ${orderType === 'stop' ? 'bg-orange-500/30 text-orange-400' : 'text-gray-500'}`}
+            >
+              STOP
+            </button>
+          </div>
+          <span className="text-xs text-gray-500">Click on chart to place order</span>
+          <button
+            onClick={() => { setShowOrderPanel(false); setDrawMode(null) }}
+            className="ml-auto text-xs text-gray-500 hover:text-white"
+          >
+            Cancel
+          </button>
+        </motion.div>
+      )}
+      
+      {/* Draw Mode Indicator */}
+      {drawMode && !showOrderPanel && (
+        <div className="px-3 py-1.5 bg-purple-500/10 border-b border-purple-500/20">
+          <span className="text-xs text-purple-400">
+            {drawMode === 'line' && '📏 Click on chart to draw horizontal line'}
+            {drawMode === 'alert' && '🔔 Click on chart to set price alert'}
           </span>
         </div>
-      </div>
+      )}
 
-      {/* Chart SVG */}
-      <div className="flex-1 relative min-h-0">
+      {/* Main Chart Area */}
+      <div 
+        className={`flex-1 relative min-h-0 ${drawMode ? 'cursor-crosshair' : 'cursor-crosshair'}`}
+        onMouseEnter={() => setShowCrosshair(true)}
+        onMouseLeave={() => { setShowCrosshair(false); setHoveredCandle(null) }}
+        onMouseMove={handleMouseMove}
+        onClick={handleChartClick}
+        ref={chartRef}
+      >
         <svg 
           className="w-full h-full" 
           viewBox={`0 0 ${chartWidth} ${chartHeight}`} 
           preserveAspectRatio="xMidYMid meet"
         >
-          {/* Background gradient */}
           <defs>
-            <linearGradient id="chartBgGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="rgba(138, 43, 226, 0.03)" />
+            <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor={isPositive ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'} />
               <stop offset="100%" stopColor="rgba(0, 0, 0, 0)" />
-            </linearGradient>
-            <linearGradient id="greenGlow" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#22c55e" />
-              <stop offset="100%" stopColor="#16a34a" />
-            </linearGradient>
-            <linearGradient id="redGlow" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#ef4444" />
-              <stop offset="100%" stopColor="#dc2626" />
             </linearGradient>
           </defs>
           
-          <rect x="0" y="0" width={chartWidth} height={chartHeight} fill="url(#chartBgGradient)" />
+          {/* Background */}
+          <rect x="0" y="0" width={chartWidth} height={chartHeight} fill="#080808" />
 
-          {/* Horizontal grid lines */}
+          {/* Grid lines */}
           {priceLevels.map((price, i) => (
             <g key={i}>
               <line
-                x1="40"
+                x1={leftPadding}
                 y1={scaleY(price)}
-                x2={chartWidth}
+                x2={chartWidth - rightPadding}
                 y2={scaleY(price)}
-                stroke="rgba(255, 255, 255, 0.05)"
+                stroke="rgba(255, 255, 255, 0.03)"
                 strokeWidth="1"
-                strokeDasharray={i === 0 || i === priceLevels.length - 1 ? "0" : "4,4"}
               />
-              {expanded && (
-                <text
-                  x="35"
-                  y={scaleY(price) + 4}
-                  fill="rgba(255, 255, 255, 0.3)"
-                  fontSize="10"
-                  textAnchor="end"
-                  fontFamily="monospace"
-                >
-                  ${price.toFixed(0)}
-                </text>
-              )}
+              <text
+                x={chartWidth - rightPadding + 5}
+                y={scaleY(price) + 3}
+                fill="rgba(255, 255, 255, 0.3)"
+                fontSize={expanded ? "10" : "8"}
+                fontFamily="monospace"
+              >
+                {price.toFixed(0)}
+              </text>
             </g>
           ))}
+          
+          {/* Area Chart */}
+          {chartType === 'area' && (
+            <path
+              d={`M ${scaleX(0)} ${scaleY(candleData[0].close)} ${candleData.map((c, i) => `L ${scaleX(i)} ${scaleY(c.close)}`).join(' ')} L ${scaleX(candleData.length - 1)} ${chartHeight} L ${scaleX(0)} ${chartHeight} Z`}
+              fill="url(#areaGradient)"
+            />
+          )}
+          
+          {/* Line Chart */}
+          {chartType === 'line' && (
+            <path
+              d={`M ${candleData.map((c, i) => `${scaleX(i)} ${scaleY(c.close)}`).join(' L ')}`}
+              fill="none"
+              stroke={isPositive ? '#22c55e' : '#ef4444'}
+              strokeWidth="2"
+            />
+          )}
 
           {/* Candlesticks */}
-          {candleData.map((candle, i) => {
-            const x = 50 + i * (candleWidth + candleGap)
+          {chartType === 'candle' && candleData.map((candle, i) => {
+            const x = scaleX(i)
             const openY = scaleY(candle.open)
             const closeY = scaleY(candle.close)
             const highY = scaleY(candle.high)
             const lowY = scaleY(candle.low)
             const bodyTop = Math.min(openY, closeY)
-            const bodyHeight = Math.abs(closeY - openY) || 1
+            const bodyHeight = Math.max(Math.abs(closeY - openY), 1)
+            const isHovered = hoveredCandle === i
             
             return (
-              <motion.g 
-                key={i}
-                initial={{ opacity: 0, scaleY: 0 }}
-                animate={{ opacity: 1, scaleY: 1 }}
-                transition={{ delay: i * 0.02, duration: 0.3 }}
-                style={{ transformOrigin: `${x + candleWidth/2}px ${chartHeight}px` }}
-              >
-                {/* Wick (high-low line) */}
+              <g key={i} opacity={hoveredCandle !== null && !isHovered ? 0.5 : 1}>
                 <line
                   x1={x + candleWidth / 2}
                   y1={highY}
                   x2={x + candleWidth / 2}
                   y2={lowY}
                   stroke={candle.bullish ? '#22c55e' : '#ef4444'}
-                  strokeWidth={expanded ? 1.5 : 1}
+                  strokeWidth={1}
                 />
-                
-                {/* Body */}
                 <rect
                   x={x}
                   y={bodyTop}
                   width={candleWidth}
                   height={bodyHeight}
                   fill={candle.bullish ? '#22c55e' : '#ef4444'}
-                  rx="1"
-                  className={candle.bullish ? 'drop-shadow-[0_0_3px_rgba(34,197,94,0.5)]' : 'drop-shadow-[0_0_3px_rgba(239,68,68,0.5)]'}
+                  stroke={isHovered ? '#fff' : 'none'}
+                  strokeWidth={1}
                 />
-              </motion.g>
+              </g>
             )
           })}
+          
+          {/* User Price Lines */}
+          {priceLines.map(line => (
+            <g key={line.id}>
+              <line
+                x1={leftPadding}
+                y1={scaleY(line.price)}
+                x2={chartWidth - rightPadding}
+                y2={scaleY(line.price)}
+                stroke={line.color}
+                strokeWidth="1"
+                strokeDasharray="8,4"
+              />
+              <rect
+                x={chartWidth - rightPadding + 2}
+                y={scaleY(line.price) - 10}
+                width="60"
+                height="20"
+                fill={line.color}
+                rx="3"
+                className="cursor-pointer"
+                onClick={(e) => { e.stopPropagation(); removePriceLine(line.id) }}
+              />
+              <text x={chartWidth - rightPadding + 32} y={scaleY(line.price) + 4} fill="white" fontSize="10" textAnchor="middle" fontFamily="monospace">
+                ${line.price.toFixed(2)}
+              </text>
+            </g>
+          ))}
+          
+          {/* Price Alerts */}
+          {alerts.map(alert => (
+            <g key={alert.id}>
+              <line
+                x1={leftPadding}
+                y1={scaleY(alert.price)}
+                x2={chartWidth - rightPadding}
+                y2={scaleY(alert.price)}
+                stroke="#eab308"
+                strokeWidth="1"
+                strokeDasharray="4,4"
+              />
+              <g transform={`translate(${leftPadding - 15}, ${scaleY(alert.price)})`}>
+                <circle r="10" fill="#eab308" className="cursor-pointer" onClick={(e) => { e.stopPropagation(); removeAlert(alert.id) }} />
+                <Bell x="-5" y="-5" size={10} color="#000" />
+              </g>
+              <rect x={chartWidth - rightPadding + 2} y={scaleY(alert.price) - 10} width="60" height="20" fill="#eab308" rx="3" />
+              <text x={chartWidth - rightPadding + 32} y={scaleY(alert.price) + 4} fill="black" fontSize="10" textAnchor="middle" fontFamily="monospace" fontWeight="bold">
+                ${alert.price.toFixed(2)}
+              </text>
+            </g>
+          ))}
+          
+          {/* Orders */}
+          {orders.map(order => (
+            <g key={order.id}>
+              <line
+                x1={leftPadding}
+                y1={scaleY(order.price)}
+                x2={chartWidth - rightPadding}
+                y2={scaleY(order.price)}
+                stroke={order.side === 'buy' ? '#22c55e' : '#ef4444'}
+                strokeWidth="2"
+              />
+              <rect
+                x={leftPadding}
+                y={scaleY(order.price) - 12}
+                width="80"
+                height="24"
+                fill={order.side === 'buy' ? '#22c55e' : '#ef4444'}
+                rx="4"
+                className="cursor-pointer"
+                onClick={(e) => { e.stopPropagation(); removeOrder(order.id) }}
+              />
+              <text x={leftPadding + 40} y={scaleY(order.price) + 3} fill="white" fontSize="10" textAnchor="middle" fontFamily="monospace" fontWeight="bold">
+                {order.side.toUpperCase()} {order.type.toUpperCase()}
+              </text>
+              <rect x={chartWidth - rightPadding + 2} y={scaleY(order.price) - 10} width="60" height="20" fill={order.side === 'buy' ? '#22c55e' : '#ef4444'} rx="3" />
+              <text x={chartWidth - rightPadding + 32} y={scaleY(order.price) + 4} fill="white" fontSize="10" textAnchor="middle" fontFamily="monospace" fontWeight="bold">
+                ${order.price.toFixed(2)}
+              </text>
+            </g>
+          ))}
+
+          {/* Crosshair */}
+          {showCrosshair && mousePos.x > leftPadding && mousePos.x < chartWidth - rightPadding && (
+            <>
+              <line x1={mousePos.x} y1={0} x2={mousePos.x} y2={chartHeight} stroke="rgba(138, 43, 226, 0.4)" strokeWidth="1" strokeDasharray="4,4" />
+              <line x1={leftPadding} y1={mousePos.y} x2={chartWidth - rightPadding} y2={mousePos.y} stroke="rgba(138, 43, 226, 0.4)" strokeWidth="1" strokeDasharray="4,4" />
+              <rect x={chartWidth - rightPadding + 2} y={mousePos.y - 10} width="60" height="20" fill="rgba(138, 43, 226, 0.9)" rx="3" />
+              <text x={chartWidth - rightPadding + 32} y={mousePos.y + 4} fill="white" fontSize="10" textAnchor="middle" fontFamily="monospace">
+                ${scaleYInverse(mousePos.y).toFixed(2)}
+              </text>
+            </>
+          )}
 
           {/* Current price line */}
-          <motion.g
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-          >
-            <line
-              x1="40"
-              y1={scaleY(lastCandle.close)}
-              x2={chartWidth}
-              y2={scaleY(lastCandle.close)}
-              stroke={isPositive ? '#22c55e' : '#ef4444'}
-              strokeWidth="1"
-              strokeDasharray="6,3"
-              opacity="0.6"
-            />
-            <rect
-              x={chartWidth - 60}
-              y={scaleY(lastCandle.close) - 10}
-              width="55"
-              height="20"
-              fill={isPositive ? '#22c55e' : '#ef4444'}
-              rx="4"
-            />
-            <text
-              x={chartWidth - 32}
-              y={scaleY(lastCandle.close) + 4}
-              fill="white"
-              fontSize="10"
-              textAnchor="middle"
-              fontFamily="monospace"
-              fontWeight="bold"
-            >
-              ${lastCandle.close.toFixed(2)}
-            </text>
-          </motion.g>
+          <line x1={leftPadding} y1={scaleY(lastCandle.close)} x2={chartWidth - rightPadding} y2={scaleY(lastCandle.close)} stroke={isPositive ? '#22c55e' : '#ef4444'} strokeWidth="1" strokeDasharray="6,3" opacity="0.6" />
+          <rect x={chartWidth - rightPadding + 2} y={scaleY(lastCandle.close) - 10} width="60" height="20" fill={isPositive ? '#22c55e' : '#ef4444'} rx="3" />
+          <text x={chartWidth - rightPadding + 32} y={scaleY(lastCandle.close) + 4} fill="white" fontSize="10" textAnchor="middle" fontFamily="monospace" fontWeight="bold">
+            ${lastCandle.close.toFixed(2)}
+          </text>
         </svg>
       </div>
 
-      {/* Volume bars (optional for expanded view) */}
-      {expanded && (
-        <div className="h-16 mt-2 border-t border-white/5 pt-2">
-          <svg className="w-full h-full" viewBox={`0 0 ${chartWidth} 50`} preserveAspectRatio="xMidYMid meet">
+      {/* Volume bars */}
+      {!compact && (
+        <div className={`${expanded ? 'h-16' : 'h-10'} border-t border-white/5`}>
+          <svg className="w-full h-full" viewBox={`0 0 ${chartWidth} ${expanded ? 55 : 35}`} preserveAspectRatio="xMidYMid meet">
+            <text x={leftPadding - 5} y="12" fill="rgba(255,255,255,0.2)" fontSize="8" textAnchor="end">Vol</text>
             {candleData.map((candle, i) => {
-              const x = 50 + i * (candleWidth + candleGap)
+              const x = scaleX(i)
               const maxVol = Math.max(...candleData.map(d => d.volume))
-              const volHeight = (candle.volume / maxVol) * 40
+              const barHeight = expanded ? 45 : 28
+              const volHeight = (candle.volume / maxVol) * barHeight
+              const isHovered = hoveredCandle === i
               
               return (
-                <motion.rect
+                <rect
                   key={i}
                   x={x}
-                  y={45 - volHeight}
+                  y={barHeight + 5 - volHeight}
                   width={candleWidth}
                   height={volHeight}
-                  fill={candle.bullish ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}
-                  rx="1"
-                  initial={{ scaleY: 0 }}
-                  animate={{ scaleY: 1 }}
-                  transition={{ delay: i * 0.02 + 0.3, duration: 0.2 }}
-                  style={{ transformOrigin: `${x}px 45px` }}
+                  fill={candle.bullish ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'}
+                  opacity={hoveredCandle !== null && !isHovered ? 0.3 : 1}
                 />
               )
             })}
@@ -513,12 +876,25 @@ function CandlestickChart({ ticker, compact = false, expanded = false }) {
         </div>
       )}
 
-      {/* Time axis */}
+      {/* Bottom Status Bar */}
       {!compact && (
-        <div className="flex items-center justify-between text-xs text-gray-500 mt-2 px-4">
-          <span>30 days ago</span>
-          <span>15 days ago</span>
-          <span>Today</span>
+        <div className="flex items-center justify-between px-3 py-1.5 border-t border-white/5 bg-[#0c0c0c] text-xs">
+          <div className="flex items-center gap-4 text-gray-500">
+            <span>{formatDate(candleData[0]?.date, selectedPeriod)} - {formatDate(candleData[candleData.length-1]?.date, selectedPeriod)}</span>
+            <span>•</span>
+            <span>{candleData.length} candles</span>
+          </div>
+          <div className="flex items-center gap-3">
+            {orders.length > 0 && (
+              <span className="text-blue-400">{orders.length} order{orders.length > 1 ? 's' : ''}</span>
+            )}
+            {alerts.length > 0 && (
+              <span className="text-yellow-400">{alerts.length} alert{alerts.length > 1 ? 's' : ''}</span>
+            )}
+            {priceLines.length > 0 && (
+              <span className="text-purple-400">{priceLines.length} line{priceLines.length > 1 ? 's' : ''}</span>
+            )}
+          </div>
         </div>
       )}
     </div>
